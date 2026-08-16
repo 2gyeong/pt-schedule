@@ -290,7 +290,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 th.fc-holiday.fc-col-header-cell { background: var(--danger-soft); }
 th.fc-holiday .fc-daynum { display: block; }
 
-#calendar, #round-week-calendar {
+#calendar {
   background: var(--surface);
   padding: 18px;
   border-radius: var(--radius-lg);
@@ -628,9 +628,22 @@ span.danger { color: var(--danger); font-weight: 550; background: none; }
 .fc-timegrid-event .fc-event-main { padding: 2px 4px; }
 .fc-col-header-cell { background: var(--surface-alt); }
 
-#round-week-calendar .fc {
-  font-size: 0.78rem;
+.fc-event-compact {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1.3;
 }
-#round-week-calendar .fc-timegrid-slot-label-cushion { font-size: 0.72rem; }
-#round-week-calendar .fc-event-title,
-#round-week-calendar .fc-event-time { font-size: 0.72rem; }
+.fc-event-compact-time {
+  font-weight: 700;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.fc-event-compact-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}

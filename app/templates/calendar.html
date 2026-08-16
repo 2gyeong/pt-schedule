@@ -30,7 +30,7 @@
 </div>
 <button type="button" id="new-event-btn">+ 새 일정 등록 (오늘)</button>
 <div id="calendar-week-label" class="hint" style="margin:16px 0 -8px;"></div>
-<div id="calendar" data-start-hour="{{ current_trainer().schedule_start_hour }}" data-end-hour="{{ current_trainer().schedule_end_hour }}"></div>
+<div id="calendar" data-start-hour="{{ display_start_hour }}" data-end-hour="{{ display_end_hour }}" data-round-start="{{ active_round.start_date.isoformat() if active_round else '' }}"></div>
 <script id="kr-holidays" type="application/json">{{ holidays | tojson }}</script>
 
 <div id="event-modal" class="modal hidden">

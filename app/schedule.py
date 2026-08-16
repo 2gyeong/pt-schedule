@@ -6,11 +6,22 @@ from flask_login import login_required
 from app import db
 from app.context import current_trainer
 from app.holidays import KR_HOLIDAYS
-from app.models import Location, Member, ScheduleEvent
+from app.models import Location, Member, RecurringTrainerAvailability, ScheduleEvent
 from app.rounds import active_round_for, round_panel_context
 from app.scheduling import member_available_background, slot_conflicts
 
 schedule_bp = Blueprint("schedule", __name__)
+
+
+def _display_hour_range(trainer):
+    """달력에 표시할 시간대. 선생님이 지정해둔 표시 범위가 실제 반복 가능 시간보다 좁으면
+    자동으로 넓혀서, 생성된 일정이 화면 밖으로 밀려 안 보이는 일이 없게 한다."""
+    start_hour = trainer.schedule_start_hour
+    end_hour = trainer.schedule_end_hour
+    for t in RecurringTrainerAvailability.query.filter_by(trainer_id=trainer.id).all():
+        start_hour = min(start_hour, t.start_time.hour)
+        end_hour = max(end_hour, t.end_time.hour + (1 if t.end_time.minute else 0))
+    return start_hour, min(end_hour, 24)
 
 
 def _apply_status(event: ScheduleEvent, new_status: str):
@@ -67,6 +78,7 @@ def calendar_view():
 
     active_round = active_round_for(trainer)
     round_context = round_panel_context(active_round, trainer) if active_round else None
+    display_start_hour, display_end_hour = _display_hour_range(trainer)
 
     return render_template(
         "calendar.html",
@@ -75,6 +87,8 @@ def calendar_view():
         holidays=KR_HOLIDAYS,
         active_round=active_round,
         round_context=round_context,
+        display_start_hour=display_start_hour,
+        display_end_hour=display_end_hour,
     )
 
 

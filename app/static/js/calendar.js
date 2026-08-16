@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const scheduleStartHour = Number(document.getElementById("calendar").dataset.startHour || 6);
   const scheduleEndHour = Number(document.getElementById("calendar").dataset.endHour || 22);
+  const roundStartDate = document.getElementById("calendar").dataset.roundStart || null;
 
   const modal = document.getElementById("event-modal");
   const form = document.getElementById("event-form");
@@ -138,9 +139,14 @@ document.addEventListener("DOMContentLoaded", function () {
     weekLabelEl.textContent = `${month}월 ${week}주차`;
   }
 
+  function formatEventTime(date) {
+    return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+  }
+
   const calendarEl = document.getElementById("calendar");
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "timeGridWeek",
+    initialDate: roundStartDate || undefined,
     locale: "ko",
     headerToolbar: {
       left: "prev,next today",
@@ -150,6 +156,12 @@ document.addEventListener("DOMContentLoaded", function () {
     datesSet: updateWeekLabel,
     slotMinTime: String(scheduleStartHour).padStart(2, "0") + ":00:00",
     slotMaxTime: String(scheduleEndHour).padStart(2, "0") + ":00:00",
+    eventContent: function (arg) {
+      const time = formatEventTime(arg.event.start);
+      return {
+        html: `<div class="fc-event-compact"><span class="fc-event-compact-time">${time}</span><span class="fc-event-compact-title">${arg.event.title}</span></div>`,
+      };
+    },
     dayCellClassNames: function (arg) {
       return KR_HOLIDAYS[toDateStr(arg.date)] ? ["fc-holiday"] : [];
     },
