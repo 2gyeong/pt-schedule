@@ -194,7 +194,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   gap: 10px;
   margin-bottom: 22px;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   background: var(--surface);
   padding: 16px;
   border-radius: var(--radius);
