@@ -192,8 +192,10 @@ document.addEventListener("DOMContentLoaded", function () {
     },
     events: "/api/events",
     eventDataTransform: function (raw) {
-      raw.startEditable = raw.extendedProps.status === "요청" || raw.extendedProps.status === "확정";
-      raw.durationEditable = false;
+      if (raw.extendedProps) {
+        raw.startEditable = raw.extendedProps.status === "요청" || raw.extendedProps.status === "확정";
+        raw.durationEditable = false;
+      }
       return raw;
     },
     eventClassNames: function (arg) {
