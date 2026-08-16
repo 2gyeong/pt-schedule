@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}가능 시간{% endblock %}
+{% block content %}
+<h1>선생님 가능 시간</h1>
+<p class="hint">매주 반복되는 근무 가능 시간을 블록으로 선택해주세요. 클릭하거나 드래그해서 여러 칸을 한 번에 선택할 수 있어요. 스케줄 자동 생성 시 이 시간 안에서만 배정됩니다.</p>
+
+<div id="availability-grid"></div>
+
+<h2>특정 날짜 예외 (이 날짜만 불가)</h2>
+<p class="hint">위 가능 시간과 별개로, 특정 날짜에만 예외적으로 안 되는 시간이 있으면 여기에 등록하세요.</p>
+
+<form method="post" action="{{ url_for('blackouts.create_blackout') }}" class="member-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="date" name="date" id="bo-date" required>
+  <label class="inline-check"><input type="checkbox" id="bo-allday"> 하루 종일</label>
+  <input type="time" name="start_time" id="bo-start" value="09:00" required>
+  <input type="time" name="end_time" id="bo-end" value="10:00" required>
+  <input type="text" name="memo" placeholder="메모(선택)">
+  <button type="submit">등록</button>
+</form>
+
+<table class="member-table">
+  <thead>
+    <tr><th>날짜</th><th>시작</th><th>종료</th><th>메모</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for b in blackouts %}
+    <tr>
+      <td>{{ b.date.isoformat() }}</td>
+      <td>{{ b.start_time.strftime("%H:%M") }}</td>
+      <td>{{ b.end_time.strftime("%H:%M") }}</td>
+      <td>{{ b.memo or "-" }}</td>
+      <td>
+        <form method="post" action="{{ url_for('blackouts.delete_blackout', blackout_id=b.id) }}"
+              onsubmit="return confirm('삭제할까요?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="danger">삭제</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">등록된 예외가 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/block_grid.js') }}"></script>
+<script>
+  initBlockGrid(document.getElementById("availability-grid"), {
+    existing: {{ recurring_blocks | tojson }},
+    saveUrl: "{{ url_for('blackouts.save_recurring') }}",
+    csrfToken: document.querySelector('meta[name="csrf-token"]').getAttribute("content"),
+  });
+
+  const boStart = document.getElementById("bo-start");
+  const boEnd = document.getElementById("bo-end");
+  const boAllday = document.getElementById("bo-allday");
+
+  boStart.addEventListener("change", function () {
+    if (!boStart.value) return;
+    const [h, m] = boStart.value.split(":").map(Number);
+    const total = (h * 60 + m + 60) % 1440;
+    boEnd.value = String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
+  });
+
+  boAllday.addEventListener("change", function () {
+    if (boAllday.checked) {
+      boStart.value = "00:00";
+      boEnd.value = "23:59";
+    }
+    boStart.readOnly = boAllday.checked;
+    boEnd.readOnly = boAllday.checked;
+  });
+</script>
+{% endblock %}

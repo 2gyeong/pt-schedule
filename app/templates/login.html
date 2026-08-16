@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}로그인{% endblock %}
+{% block content %}
+<div class="login-box">
+  <h1>PT 스케줄</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="name" placeholder="이름" autofocus required>
+    <input type="password" name="password" placeholder="비밀번호" required>
+    <button type="submit">로그인</button>
+  </form>
+  <p class="hint" style="text-align:center; margin-top:14px;">
+    아직 계정이 없으신가요? <a href="{{ url_for('auth.signup') }}">회원가입</a>
+  </p>
+</div>
+{% endblock %}

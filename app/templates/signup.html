@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}회원가입{% endblock %}
+{% block content %}
+<div class="login-box">
+  <h1>트레이너 회원가입</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="name" placeholder="이름" autofocus required>
+    <input type="password" name="password" placeholder="비밀번호" required>
+    <input type="password" name="password_confirm" placeholder="비밀번호 확인" required>
+    <button type="submit">가입 신청</button>
+  </form>
+  <p class="hint" style="text-align:center; margin-top:14px;">
+    가입 신청 후 관리자 승인이 필요합니다. <a href="{{ url_for('auth.login') }}">로그인으로 돌아가기</a>
+  </p>
+</div>
+{% endblock %}

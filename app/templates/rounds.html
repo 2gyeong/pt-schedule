@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}스케줄링 라운드{% endblock %}
+{% block content %}
+<h1>스케줄링 라운드</h1>
+<p class="hint">
+  지정한 기간에 대해, 선생님/회원이 각자 저장해둔 고정 가능 시간을 기준으로 스케줄을 자동 배정합니다.
+  <strong>회원이 설정한 요일(예: 매주 월요일)이 이 기간 안에 실제로 포함되어야</strong> 배정될 수 있어요 —
+  기간이 하루뿐이면 그 요일에 설정해둔 회원만 배정됩니다. 시작일/종료일은 기본으로 다음 주 월요일~일요일로 채워져 있으니 필요하면 직접 바꿔주세요.
+</p>
+
+<form method="post" action="{{ url_for('rounds.create_round') }}" class="member-form" id="round-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>시작일
+    <input type="date" name="start_date" id="round-start" required>
+  </label>
+  <label>종료일
+    <input type="date" name="end_date" id="round-end" required>
+  </label>
+  <label>세션 길이(분)
+    <input type="number" name="session_minutes" value="60" min="10" step="5" required>
+  </label>
+  <button type="submit">새 라운드 시작</button>
+</form>
+<p id="range-weekday-hint" class="hint"></p>
+
+<table class="member-table">
+  <thead>
+    <tr><th>기간</th><th>세션 길이</th><th>상태</th><th></th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for r in rounds %}
+    <tr>
+      <td>{{ r.start_date.isoformat() }} ~ {{ r.end_date.isoformat() }}</td>
+      <td>{{ r.session_minutes }}분</td>
+      <td>{{ r.status }}</td>
+      <td><a href="{{ url_for('rounds.round_detail', round_id=r.id) }}">상세보기</a></td>
+      <td>
+        <form method="post" action="{{ url_for('rounds.delete_round', round_id=r.id) }}"
+              onsubmit="return confirm('이 라운드를 삭제할까요? (아직 확정되지 않은 배정은 함께 삭제됩니다)');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="danger">삭제</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">생성된 라운드가 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block scripts %}
+<script>
+  const WEEKDAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"]; // JS getDay(): 0=일
+  const activeWeekdayNames = {{ active_weekday_names | tojson }};
+
+  function toIso(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function nextMonday() {
+    const d = new Date();
+    const day = d.getDay(); // 0=일 ~ 6=토
+    let diff = (1 - day + 7) % 7;
+    if (diff === 0) diff = 7; // 오늘이 월요일이면 다음 주 월요일로
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+  const today = toIso(new Date());
+  const startField = document.getElementById("round-start");
+  const endField = document.getElementById("round-end");
+  const hintEl = document.getElementById("range-weekday-hint");
+
+  const defaultStart = nextMonday();
+  const defaultEnd = new Date(defaultStart);
+  defaultEnd.setDate(defaultStart.getDate() + 6);
+  startField.value = toIso(defaultStart);
+  endField.value = toIso(defaultEnd);
+  endField.min = today;
+
+  startField.addEventListener("change", function () {
+    endField.min = startField.value;
+    if (endField.value < startField.value) endField.value = startField.value;
+  });
+
+  document.getElementById("round-form").addEventListener("submit", function (e) {
+    if (endField.value < startField.value) {
+      e.preventDefault();
+      alert("종료일이 시작일보다 빠를 수 없어요.");
+    }
+  });
+
+  function updateHint() {
+    if (!startField.value || !endField.value) return;
+    if (endField.value < startField.value) {
+      hintEl.textContent = "⚠️ 종료일이 시작일보다 빠릅니다.";
+      hintEl.style.color = "#c0392b";
+      return;
+    }
+    const start = new Date(startField.value + "T00:00:00");
+    const end = new Date(endField.value + "T00:00:00");
+    const names = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const name = WEEKDAY_NAMES[d.getDay()];
+      if (!names.includes(name)) names.push(name);
+    }
+    const overlap = names.some((n) => activeWeekdayNames.includes(n));
+    if (activeWeekdayNames.length === 0) {
+      hintEl.textContent = `선택한 기간의 요일: ${names.join(", ")}. (아직 선생님/회원의 고정 가능 시간이 겹치는 요일이 없어요)`;
+      hintEl.style.color = "#e67e22";
+    } else if (overlap) {
+      hintEl.textContent = `선택한 기간의 요일: ${names.join(", ")}. 가능 시간이 설정된 요일(${activeWeekdayNames.join(", ")})이 포함되어 있어요.`;
+      hintEl.style.color = "#27ae60";
+    } else {
+      hintEl.textContent = `⚠️ 선택한 기간의 요일(${names.join(", ")})에는 아무도 가능 시간을 설정하지 않았어요. 가능 시간이 설정된 요일은 ${activeWeekdayNames.join(", ")}입니다. 기간을 늘려주세요.`;
+      hintEl.style.color = "#c0392b";
+    }
+  }
+  startField.addEventListener("change", updateHint);
+  endField.addEventListener("change", updateHint);
+  updateHint();
+</script>
+{% endblock %}

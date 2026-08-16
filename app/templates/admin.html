@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}관리자{% endblock %}
+{% block content %}
+<h1>트레이너 관리</h1>
+
+<table class="member-table">
+  <thead>
+    <tr><th>이름</th><th>상태</th><th>가입일</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for t in trainers %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td>
+        {% if t.status == "승인됨" %}<span class="ok">승인됨</span>
+        {% elif t.status == "대기" %}<span class="pending">대기</span>
+        {% else %}<span class="danger">거절됨</span>{% endif %}
+      </td>
+      <td>{{ t.created_at.strftime("%Y-%m-%d") }}</td>
+      <td style="display:flex; gap:6px;">
+        {% if t.status == "대기" %}
+        <form method="post" action="{{ url_for('admin.approve_trainer', trainer_id=t.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit">승인</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.reject_trainer', trainer_id=t.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="danger">거절</button>
+        </form>
+        {% endif %}
+        {% if t.status == "승인됨" %}
+        <form method="post" action="{{ url_for('admin.impersonate', trainer_id=t.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="copy-link-btn">이 트레이너로 보기</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">등록된 트레이너가 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

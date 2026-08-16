@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}전체 스케줄{% endblock %}
+{% block nav %}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.15/index.global.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="member-tabs">
+  <a href="{{ url_for('booking.book_page', token=member.booking_token) }}">내 예약/가능 시간</a>
+  <a href="{{ url_for('booking.shared_schedule', token=member.booking_token) }}" class="active">전체 스케줄</a>
+</div>
+
+<h1>전체 스케줄</h1>
+<p class="hint">내 예약은 검은 테두리로 표시됩니다. 다른 회원들의 예약은 이름 없이 지점 색깔 블록으로만 보여요.</p>
+<div id="shared-calendar"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const calendarEl = document.getElementById("shared-calendar");
+  const calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: "dayGridMonth",
+    headerToolbar: {
+      left: "prev,next today",
+      center: "title",
+      right: "dayGridMonth,timeGridWeek",
+    },
+    events: "{{ url_for('booking.shared_schedule_events', token=member.booking_token) }}",
+    eventClassNames: function (arg) {
+      return arg.event.extendedProps.mine ? ["ev-mine"] : [];
+    },
+  });
+  calendar.render();
+</script>
+{% endblock %}

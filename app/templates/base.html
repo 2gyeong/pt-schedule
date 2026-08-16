@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}PT 스케줄{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% block nav %}
+  {% if current_user.is_authenticated %}
+  <nav class="navbar">
+    {% if current_user.role == "admin" %}
+    <a href="{{ url_for('admin.list_trainers') }}">관리자</a>
+    {% endif %}
+    {% if current_user.role != "admin" or session.get("impersonate_trainer_id") %}
+    <a href="{{ url_for('schedule.calendar_view') }}">달력</a>
+    <a href="{{ url_for('members.list_members') }}">회원 관리</a>
+    <a href="{{ url_for('locations.list_locations') }}">지점 관리</a>
+    <a href="{{ url_for('blackouts.list_blackouts') }}">가능 시간</a>
+    <a href="{{ url_for('rounds.list_rounds') }}">스케줄링 라운드</a>
+    {% endif %}
+    <a href="{{ url_for('auth.logout') }}" class="logout">로그아웃</a>
+  </nav>
+  {% if session.get("impersonate_trainer_id") %}
+  <div class="impersonate-banner">
+    <strong>{{ current_trainer().name }}</strong>님 계정으로 보는 중입니다.
+    <form method="post" action="{{ url_for('admin.stop_impersonating') }}" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">관리자로 돌아가기</button>
+    </form>
+  </div>
+  {% endif %}
+  {% endif %}
+  {% endblock %}
+
+  <main class="container">
+    {% block flash %}
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="flash">
+          {% for message in messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    {% endblock %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
