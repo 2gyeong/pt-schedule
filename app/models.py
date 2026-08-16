@@ -27,6 +27,21 @@ class Location(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class TravelTime(db.Model):
+    """지점 간(또는 집-지점 간) 실제 이동 시간을 선생님이 직접 입력한 값.
+    있으면 거리 기반 자동 계산 대신 이 값을 그대로 사용한다. location_a_id/location_b_id가
+    NULL이면 '집'을 뜻한다."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"), nullable=False)
+    location_a_id = db.Column(db.Integer, db.ForeignKey("location.id"), nullable=True)
+    location_b_id = db.Column(db.Integer, db.ForeignKey("location.id"), nullable=True)
+    minutes = db.Column(db.Integer, nullable=False)
+
+    location_a = db.relationship("Location", foreign_keys=[location_a_id])
+    location_b = db.relationship("Location", foreign_keys=[location_b_id])
+
+
 class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"))
@@ -38,6 +53,7 @@ class Member(db.Model):
     booking_token = db.Column(
         db.String(32), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(16)
     )
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     location = db.relationship("Location")
@@ -144,6 +160,7 @@ class ScheduleEvent(db.Model):
     memo = db.Column(db.String(255))
     source = db.Column(db.String(10), default="trainer")  # trainer / member
     status = db.Column(db.String(20), default="확정")  # 요청 / 확정 / 완료 / 취소
+    event_type = db.Column(db.String(10), nullable=False, default="PT")  # PT / 상담
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     location = db.relationship("Location")
@@ -165,3 +182,12 @@ class ChangeRequest(db.Model):
 
     event = db.relationship("ScheduleEvent")
     member = db.relationship("Member")
+
+
+class Announcement(db.Model):
+    """선생님이 회원들에게 보여주는 공지사항."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

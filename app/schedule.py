@@ -26,7 +26,8 @@ def event_to_dict(event: ScheduleEvent) -> dict:
     start = f"{event.date.isoformat()}T{event.start_time.isoformat()}"
     end = f"{event.date.isoformat()}T{event.end_time.isoformat()}"
     location_name = event.location.name if event.location else None
-    title = f"{event.member.name} ({location_name})" if location_name else event.member.name
+    prefix = "[상담] " if event.event_type == "상담" else ""
+    title = f"{prefix}{event.member.name} ({location_name})" if location_name else f"{prefix}{event.member.name}"
     return {
         "id": event.id,
         "title": title,
@@ -42,6 +43,7 @@ def event_to_dict(event: ScheduleEvent) -> dict:
             "memo": event.memo or "",
             "status": event.status,
             "source": event.source,
+            "event_type": event.event_type,
         },
     }
 
@@ -51,7 +53,7 @@ def event_to_dict(event: ScheduleEvent) -> dict:
 @login_required
 def calendar_view():
     trainer = current_trainer()
-    members = Member.query.filter_by(trainer_id=trainer.id).order_by(Member.name).all()
+    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).order_by(Member.name).all()
     locations = Location.query.filter_by(trainer_id=trainer.id).order_by(Location.name).all()
     return render_template("calendar.html", members=members, locations=locations)
 
@@ -88,6 +90,7 @@ def create_event():
     if slot_conflicts(trainer.id, event_date, start_time, end_time, location):
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
 
+    event_type = data.get("event_type") if data.get("event_type") in ("PT", "상담") else "PT"
     event = ScheduleEvent(
         trainer_id=trainer.id,
         member_id=member.id,
@@ -98,6 +101,7 @@ def create_event():
         memo=data.get("memo") or None,
         source="trainer",
         status="요청",  # _apply_status로 확정 전환시켜 잔여 횟수 차감
+        event_type=event_type,
     )
     db.session.add(event)
     db.session.flush()
@@ -135,6 +139,8 @@ def update_event(event_id):
     event.start_time = new_start
     event.end_time = new_end
     event.memo = data.get("memo", event.memo)
+    if data.get("event_type") in ("PT", "상담"):
+        event.event_type = data["event_type"]
     if data.get("status"):
         _apply_status(event, data["status"])
     db.session.commit()

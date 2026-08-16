@@ -30,7 +30,7 @@ def list_rounds():
         .order_by(SchedulingRound.created_at.desc())
         .all()
     )
-    member_ids = [m.id for m in Member.query.filter_by(trainer_id=trainer.id).all()]
+    member_ids = [m.id for m in Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).all()]
     active_weekdays = sorted(
         {t.weekday for t in RecurringTrainerAvailability.query.filter_by(trainer_id=trainer.id).all()}
         & {
@@ -93,7 +93,7 @@ def _events_context(round_obj):
 def round_detail(round_id):
     trainer = current_trainer()
     round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
-    members = Member.query.filter_by(trainer_id=trainer.id).order_by(Member.name).all()
+    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).order_by(Member.name).all()
     submitted_member_ids = {
         s.member_id for s in RoundSubmission.query.filter_by(round_id=round_id).all()
     }
@@ -111,6 +111,43 @@ def round_detail(round_id):
         events=events,
         slot_options_by_event=slot_options_by_event,
     )
+
+
+@rounds_bp.route("/rounds/<int:round_id>/members/<int:member_id>/toggle-submitted", methods=["POST"])
+@login_required
+def toggle_submitted(round_id, member_id):
+    """회원이 직접 제출하지 않았어도 선생님이 대신 제출완료로 처리하거나, 다시 미제출로 되돌린다."""
+    trainer = current_trainer()
+    round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
+    member = Member.query.filter_by(id=member_id, trainer_id=trainer.id).first_or_404()
+
+    existing = RoundSubmission.query.filter_by(round_id=round_obj.id, member_id=member.id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"ok": True, "member_id": member.id, "submitted": False})
+    db.session.add(RoundSubmission(round_id=round_obj.id, member_id=member.id))
+    db.session.commit()
+    return jsonify({"ok": True, "member_id": member.id, "submitted": True})
+
+
+@rounds_bp.route("/rounds/<int:round_id>/mark-all-submitted", methods=["POST"])
+@login_required
+def mark_all_submitted(round_id):
+    """제출하지 않은 모든 회원을 한 번에 제출완료로 처리한다."""
+    trainer = current_trainer()
+    round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
+    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).all()
+    already = {s.member_id for s in RoundSubmission.query.filter_by(round_id=round_obj.id).all()}
+
+    updated_ids = []
+    for member in members:
+        if member.id in already:
+            continue
+        db.session.add(RoundSubmission(round_id=round_obj.id, member_id=member.id))
+        updated_ids.append(member.id)
+    db.session.commit()
+    return jsonify({"ok": True, "member_ids": updated_ids})
 
 
 @rounds_bp.route("/rounds/<int:round_id>/members/<int:member_id>/valid-slots", methods=["GET"])
@@ -211,7 +248,7 @@ def generate(round_id):
     round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
 
     RoundQuota.query.filter_by(round_id=round_id).delete()
-    for member in Member.query.filter_by(trainer_id=trainer.id).all():
+    for member in Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).all():
         raw = request.form.get(f"quota_{member.id}", "0").strip()
         count = int(raw) if raw.isdigit() else 0
         if count > 0:

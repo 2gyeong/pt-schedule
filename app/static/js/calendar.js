@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const form = document.getElementById("event-form");
   const modalTitle = document.getElementById("modal-title");
   const idField = document.getElementById("event-id");
+  const typeField = document.getElementById("event-type");
   const memberField = document.getElementById("event-member");
   const locationField = document.getElementById("event-location");
   const dateField = document.getElementById("event-date");
@@ -42,20 +43,27 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
   }
 
+  function durationForType() {
+    return typeField.value === "상담" ? 30 : 60;
+  }
+
   function setStartTime(time) {
     startField.value = time;
-    endField.value = addMinutes(time, 60);
+    endField.value = addMinutes(time, durationForType());
     document.querySelectorAll(".time-cube").forEach(function (cube) {
       cube.classList.toggle("selected", cube.dataset.time === time);
     });
   }
   startField.addEventListener("change", function () {
     if (startField.value) {
-      endField.value = addMinutes(startField.value, 60);
+      endField.value = addMinutes(startField.value, durationForType());
       document.querySelectorAll(".time-cube").forEach(function (cube) {
         cube.classList.toggle("selected", cube.dataset.time === startField.value);
       });
     }
+  });
+  typeField.addEventListener("change", function () {
+    if (startField.value) endField.value = addMinutes(startField.value, durationForType());
   });
 
   const cubeContainer = document.getElementById("event-time-cubes");
@@ -80,6 +88,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function openCreateModal(dateStr) {
     modalTitle.textContent = "일정 등록";
     idField.value = "";
+    typeField.value = "PT";
     locationField.value = "";
     dateField.value = dateStr;
     setStartTime("10:00");
@@ -110,6 +119,7 @@ document.addEventListener("DOMContentLoaded", function () {
     events: "/api/events",
     eventClassNames: function (arg) {
       const classes = arg.event.extendedProps.status === "요청" ? ["ev-pending"] : [];
+      if (arg.event.extendedProps.event_type === "상담") classes.push("ev-consult");
       if (selectedMemberId && String(arg.event.extendedProps.member_id) !== selectedMemberId) {
         classes.push("ev-dimmed");
       }
@@ -121,6 +131,7 @@ document.addEventListener("DOMContentLoaded", function () {
     eventClick: function (info) {
       const event = info.event;
       idField.value = event.id;
+      typeField.value = event.extendedProps.event_type || "PT";
       memberField.value = event.extendedProps.member_id;
       locationField.value = event.extendedProps.location_id || "";
       dateField.value = event.startStr.slice(0, 10);
@@ -172,6 +183,7 @@ document.addEventListener("DOMContentLoaded", function () {
       end_time: endField.value,
       status: statusField.value,
       memo: memoField.value,
+      event_type: typeField.value,
     };
     const id = idField.value;
     const url = id ? `/api/events/${id}` : "/api/events";

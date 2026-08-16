@@ -41,4 +41,37 @@
     {% endfor %}
   </tbody>
 </table>
+
+{% if pair_rows %}
+<h2>지점 간 실제 이동 시간</h2>
+<div class="callout">
+  <ul>
+    <li>비워두면 지점 좌표 기반으로 자동 계산된 이동 시간을 사용해요.</li>
+    <li>직접 입력하면 그 값을 우선으로 써요. 실제 대중교통 이동 시간을 아시면 입력해주세요.</li>
+  </ul>
+</div>
+<form method="post" action="{{ url_for('locations.save_travel_times') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <table class="member-table">
+    <thead>
+      <tr><th>구간</th><th>이동 시간(분)</th></tr>
+    </thead>
+    <tbody>
+      {% for row in pair_rows %}
+      <tr>
+        <td>{{ row.a_name }} ↔ {{ row.b_name }}</td>
+        <td>
+          <input type="number" name="travel_{{ row.key }}" min="0" step="1"
+                 value="{{ row.minutes if row.minutes is not none else '' }}"
+                 placeholder="자동 계산: {{ row.auto_minutes }}분" style="width:140px">
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="modal-actions" style="margin-top:12px; max-width:200px;">
+    <button type="submit">저장</button>
+  </div>
+</form>
+{% endif %}
 {% endblock %}

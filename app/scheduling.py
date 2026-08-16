@@ -9,6 +9,7 @@ from app.models import (
     RoundQuota,
     RoundSubmission,
     ScheduleEvent,
+    TravelTime,
     TrainerBlackout,
     WeekdayStartLocation,
 )
@@ -43,24 +44,36 @@ def _distance(loc_a, loc_b) -> float:
     return haversine_km(loc_a.lat, loc_a.lng, loc_b.lat, loc_b.lng)
 
 
-AVG_TRAVEL_SPEED_KMH = 25  # 도심 이동(주차/이동 포함) 가정 평균 속도
-MIN_TRAVEL_BUFFER_MIN = 10  # 지점이 달라지면 아무리 가까워도 최소 이 정도는 비워둠
+AVG_TRAVEL_SPEED_KMH = 15  # 선생님이 대중교통으로 이동 (직선거리 기준 실효 속도, 환승 등 포함해 보수적으로 가정)
+MIN_TRAVEL_BUFFER_MIN = 20  # 지점이 달라지면, 아무리 가까워도 도보+대기 등 고정 오버헤드로 최소 이 정도는 비워둠
 
 
-def _travel_minutes(loc_a, loc_b) -> int:
-    """서로 다른 지점 사이를 이동하는 데 필요한 최소 시간(분). 같은 지점이면 0."""
+def load_travel_overrides(trainer_id):
+    """선생님이 직접 입력해둔 지점 간(또는 집-지점 간) 이동 시간을 조회 편의를 위해
+    {frozenset({location_a_id_or_None, location_b_id_or_None}): 분} 형태로 미리 불러온다."""
+    rows = TravelTime.query.filter_by(trainer_id=trainer_id).all()
+    return {frozenset({r.location_a_id, r.location_b_id}): r.minutes for r in rows}
+
+
+def _travel_minutes(loc_a, loc_b, overrides=None) -> int:
+    """서로 다른 지점 사이를 이동하는 데 필요한 최소 시간(분). 같은 지점이면 0.
+    선생님이 직접 입력해둔 실제 이동 시간이 있으면 그 값을 우선 사용한다."""
     if loc_a is None or loc_b is None or loc_a.id == loc_b.id:
         return 0
+    if overrides:
+        key = frozenset({loc_a.id, loc_b.id})
+        if key in overrides:
+            return overrides[key]
     km = haversine_km(loc_a.lat, loc_a.lng, loc_b.lat, loc_b.lng)
     return max(MIN_TRAVEL_BUFFER_MIN, math.ceil(km / AVG_TRAVEL_SPEED_KMH * 60))
 
 
-def _has_conflict(day_entries, cursor, slot_end, location) -> bool:
+def _has_conflict(day_entries, cursor, slot_end, location, overrides=None) -> bool:
     """시간이 겹치거나, 지점이 달라 이동시간이 부족하면 충돌로 본다."""
     for entry_start, entry_end, entry_loc in day_entries:
         if _overlaps(cursor, slot_end, entry_start, entry_end):
             return True
-        buffer_min = _travel_minutes(entry_loc, location)
+        buffer_min = _travel_minutes(entry_loc, location, overrides)
         if buffer_min <= 0:
             continue
         buffer = timedelta(minutes=buffer_min)
@@ -123,7 +136,10 @@ def _merge_intervals(intervals):
     return merged
 
 
-def _find_best_slot(windows, day_timeline, location, session_len, step, is_blacked_out, start_location_by_weekday=None):
+def _find_best_slot(
+    windows, day_timeline, location, session_len, step, is_blacked_out,
+    start_location_by_weekday=None, overrides=None,
+):
     best = None  # (cost, date, start_dt, end_dt)
     start_location_by_weekday = start_location_by_weekday or {}
     for window_date, w_start_dt, w_end_dt in windows:
@@ -133,7 +149,7 @@ def _find_best_slot(windows, day_timeline, location, session_len, step, is_black
             slot_end = cursor + session_len
             if not is_blacked_out(window_date, cursor, slot_end):
                 day_entries = day_timeline.get(window_date, [])
-                if not _has_conflict(day_entries, cursor, slot_end, location):
+                if not _has_conflict(day_entries, cursor, slot_end, location, overrides):
                     cost = _insertion_cost(day_entries, cursor, slot_end, location, preferred_start)
                     if best is None or cost < best[0]:
                         best = (cost, window_date, cursor, slot_end)
@@ -141,13 +157,16 @@ def _find_best_slot(windows, day_timeline, location, session_len, step, is_black
     return best
 
 
-def _day_has_feasible_slot(window_date, w_start_dt, w_end_dt, day_timeline, location, session_len, step, is_blacked_out):
+def _day_has_feasible_slot(
+    window_date, w_start_dt, w_end_dt, day_timeline, location, session_len, step, is_blacked_out,
+    overrides=None,
+):
     cursor = w_start_dt
     while cursor + session_len <= w_end_dt:
         slot_end = cursor + session_len
         if not is_blacked_out(window_date, cursor, slot_end):
             day_entries = day_timeline.get(window_date, [])
-            if not _has_conflict(day_entries, cursor, slot_end, location):
+            if not _has_conflict(day_entries, cursor, slot_end, location, overrides):
                 return True
         cursor += step
     return False
@@ -281,7 +300,8 @@ def slot_conflicts(trainer_id, d, start_time, end_time, location, exclude_event_
         if exclude_event_id and e.id == exclude_event_id:
             continue
         day_entries.append((_to_dt(e.date, e.start_time), _to_dt(e.date, e.end_time), e.location))
-    return _has_conflict(day_entries, start_dt, end_dt, location)
+    overrides = load_travel_overrides(trainer_id)
+    return _has_conflict(day_entries, start_dt, end_dt, location, overrides)
 
 
 def valid_slots_for_member(round_obj, member_id, exclude_event_id=None):
@@ -327,6 +347,7 @@ def valid_slots_for_member(round_obj, member_id, exclude_event_id=None):
     for r in recurring:
         member_by_weekday.setdefault(r.weekday, []).append((r.start_time, r.end_time))
 
+    overrides = load_travel_overrides(round_obj.trainer_id)
     slots = []
     for d in dates:
         if d in member_other_dates:
@@ -351,7 +372,7 @@ def valid_slots_for_member(round_obj, member_id, exclude_event_id=None):
                 slot_end = cursor + session_len
                 if not is_blacked_out(d, cursor, slot_end):
                     day_entries = day_timeline.get(d, [])
-                    if not _has_conflict(day_entries, cursor, slot_end, member.location):
+                    if not _has_conflict(day_entries, cursor, slot_end, member.location, overrides):
                         slots.append((d, cursor.time(), slot_end.time()))
                 cursor += step
 
@@ -396,6 +417,9 @@ def generate_schedule(round_obj):
         for s in WeekdayStartLocation.query.filter_by(trainer_id=round_obj.trainer_id).all()
     }
 
+    # 선생님이 직접 입력해둔 지점 간 실제 이동 시간 (있으면 거리 기반 자동 계산 대신 사용)
+    travel_overrides = load_travel_overrides(round_obj.trainer_id)
+
     def is_blacked_out(d, start_dt, end_dt):
         for b in one_off_blackouts:
             if b.date == d and _overlaps(start_dt, end_dt, _to_dt(d, b.start_time), _to_dt(d, b.end_time)):
@@ -403,7 +427,9 @@ def generate_schedule(round_obj):
         return False
 
     # 이번 라운드에 명시적으로 "제출"한 회원만 계산 대상에 포함 (이 트레이너 소속 회원으로 한정)
-    trainer_member_ids = {m.id for m in Member.query.filter_by(trainer_id=round_obj.trainer_id).all()}
+    trainer_member_ids = {
+        m.id for m in Member.query.filter_by(trainer_id=round_obj.trainer_id, is_deleted=False).all()
+    }
     submitted_member_ids = {
         s.member_id for s in RoundSubmission.query.filter_by(round_id=round_obj.id).all()
     } & trainer_member_ids
@@ -421,6 +447,17 @@ def generate_schedule(round_obj):
         member_blocks_by_member_weekday.setdefault((r.member_id, r.weekday), []).append(
             (r.start_time, r.end_time)
         )
+
+    # 가능 시간을 하나도 설정하지 않은 회원(예: 최진택처럼 "x")이라도 제출완료 상태면
+    # (직접 제출했든, 선생님이 강제로 제출완료 처리했든) 선생님의 근무 시간 전체를
+    # 그대로 후보 시간으로 사용해서, 스케줄상 남는 효율적인 시간에 배치될 수 있게 한다.
+    # 회원이 실제로 가능 시간을 설정해뒀으면 그 설정을 그대로 우선한다.
+    members_with_own_availability = {r.member_id for r in recurring}
+    for member_id in submitted_member_ids:
+        if member_id in members_with_own_availability:
+            continue
+        for weekday, blocks in trainer_by_weekday.items():
+            member_blocks_by_member_weekday.setdefault((member_id, weekday), []).extend(blocks)
 
     by_member = {}
     for (member_id, weekday), member_blocks in member_blocks_by_member_weekday.items():
@@ -472,7 +509,9 @@ def generate_schedule(round_obj):
             {
                 w[0]
                 for w in windows
-                if _day_has_feasible_slot(w[0], w[1], w[2], day_timeline, location, session_len, step, is_blacked_out)
+                if _day_has_feasible_slot(
+                    w[0], w[1], w[2], day_timeline, location, session_len, step, is_blacked_out, travel_overrides
+                )
             }
         )
         target_days = _pick_spaced_days(feasible_days, requested) or feasible_days[:requested]
@@ -481,7 +520,8 @@ def generate_schedule(round_obj):
         for target_date in target_days:
             day_windows = [w for w in windows if w[0] == target_date]
             best = _find_best_slot(
-                day_windows, day_timeline, location, session_len, step, is_blacked_out, start_location_by_weekday
+                day_windows, day_timeline, location, session_len, step, is_blacked_out,
+                start_location_by_weekday, travel_overrides,
             )
             if best is None:
                 continue

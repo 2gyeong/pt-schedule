@@ -42,10 +42,18 @@
 <div class="callout">
   <ul>
     <li>회원이 직접 "제출"을 눌러야 아래 표에 "제출완료"로 표시되고, 계산 대상에 포함돼요.</li>
-    <li>회원마다 이번 기간에 몇 번 PT할지 입력하세요.</li>
-    <li>잔여 횟수보다 많이 넣어도 잔여 횟수만큼만 배정돼요.</li>
+    <li>회원이 앱 밖에서 알려줬다면 "선생님 승인" 버튼으로 대신 제출완료 처리할 수 있어요.</li>
+    <li>회원마다 이번 기간에 몇 번 PT할지 입력하세요. 잔여 횟수보다 많이 넣어도 잔여 횟수만큼만 배정돼요.</li>
   </ul>
 </div>
+
+{% if round.status != "확정" %}
+<div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+  <button type="button" id="mark-all-submitted-btn" class="copy-link-btn">
+    전체 일괄 승인
+  </button>
+</div>
+{% endif %}
 
 <form method="post" action="{{ url_for('rounds.generate', round_id=round.id) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -57,9 +65,18 @@
       {% for member in members %}
       <tr>
         <td>{{ member.name }}</td>
-        <td>
-          {% if member.id in submitted_member_ids %}<span class="ok">제출완료</span>
-          {% else %}<span class="pending">미제출</span>{% endif %}
+        <td class="submit-status" data-member-id="{{ member.id }}">
+          {% if member.id in submitted_member_ids %}
+          <span class="ok">제출완료</span>
+          {% if round.status != "확정" %}
+          <button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="{{ member.id }}">취소</button>
+          {% endif %}
+          {% else %}
+          <span class="pending">미제출</span>
+          {% if round.status != "확정" %}
+          <button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="{{ member.id }}">선생님 승인</button>
+          {% endif %}
+          {% endif %}
         </td>
         <td>{{ member.note or "-" }}</td>
         <td>{{ member.remaining_sessions }}</td>
@@ -134,6 +151,47 @@
     }
   });
 
+  function renderSubmitCell(memberId, submitted) {
+    const cell = document.querySelector(`.submit-status[data-member-id="${memberId}"]`);
+    if (!cell) return;
+    if (submitted) {
+      cell.innerHTML = '<span class="ok">제출완료</span>' +
+        '<button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="' + memberId + '">취소</button>';
+    } else {
+      cell.innerHTML = '<span class="pending">미제출</span>' +
+        '<button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="' + memberId + '">선생님 승인</button>';
+    }
+  }
+
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".toggle-submitted-btn");
+    if (!btn) return;
+    const memberId = btn.dataset.memberId;
+    fetch(`/rounds/{{ round.id }}/members/${memberId}/toggle-submitted`, {
+      method: "POST",
+      headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) renderSubmitCell(memberId, data.submitted);
+      });
+  });
+
+  const markAllBtn = document.getElementById("mark-all-submitted-btn");
+  if (markAllBtn) {
+    markAllBtn.addEventListener("click", function () {
+      if (!confirm("제출하지 않은 모든 회원을 제출완료로 처리할까요?")) return;
+      fetch(`/rounds/{{ round.id }}/mark-all-submitted`, {
+        method: "POST",
+        headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          (data.member_ids || []).forEach((id) => renderSubmitCell(id, true));
+        });
+    });
+  }
+
   const eventsSection = document.getElementById("events-section");
   const reassignFlash = document.getElementById("reassign-flash");
 
@@ -189,11 +247,13 @@
     initialView: "timeGridWeek",
     initialDate: "{{ round.start_date.isoformat() }}",
     headerToolbar: { left: "prev,next today", center: "title", right: "" },
-    slotDuration: "00:10:00",
+    slotDuration: "00:30:00",
     slotLabelInterval: "01:00:00",
     snapDuration: "00:10:00",
     slotMinTime: "{{ "%02d" % current_trainer().schedule_start_hour }}:00:00",
     slotMaxTime: "{{ "%02d" % current_trainer().schedule_end_hour }}:00:00",
+    height: 750,
+    expandRows: true,
     eventDurationEditable: false,
     events: weekEvents,
     eventDragStart: function (info) {

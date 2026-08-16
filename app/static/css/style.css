@@ -55,6 +55,7 @@ body {
   color: var(--text);
 }
 .navbar a.logout { color: var(--text-muted); opacity: 0.8; }
+.navbar a.active { color: var(--text); font-weight: 700; }
 
 .nav-bell {
   margin-left: auto;
@@ -254,7 +255,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .member-table tr:last-child td { border-bottom: none; }
 .member-table td button,
 .member-table td .copy-link-btn { white-space: nowrap; }
-.member-table td:first-child { white-space: nowrap; }
+.member-table td:first-child,
+.member-table td:nth-child(2) { white-space: nowrap; }
 
 #calendar, #round-week-calendar {
   background: var(--surface);
@@ -421,8 +423,29 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   opacity: 0.25 !important;
 }
 
+.fc-event.ev-consult {
+  border-width: 2px !important;
+  border-style: dashed !important;
+  border-color: var(--text-muted) !important;
+}
+
 .copy-link-btn { background: var(--surface-alt); color: var(--text); }
 .copy-link-btn:hover { background: var(--border-soft); }
+a.copy-link-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 16px;
+  font-size: 0.92rem;
+  font-weight: 550;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  cursor: pointer;
+}
+.link-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
 
 #request-success {
   text-align: center;
@@ -511,6 +534,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .submission-list li:last-child { border-bottom: none; }
 .ok { color: var(--success); font-weight: 550; }
 .pending { color: var(--warning); font-weight: 550; }
+.submit-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  min-height: 30px;
+}
+.mark-submitted-btn { padding: 4px 10px; font-size: 0.78rem; }
 span.danger { color: var(--danger); font-weight: 550; background: none; }
 
 .impersonate-banner {
@@ -566,5 +597,8 @@ span.danger { color: var(--danger); font-weight: 550; background: none; }
 .fc-col-header-cell { background: var(--surface-alt); }
 
 #round-week-calendar .fc {
-  --fc-timegrid-slot-height: 20px;
+  font-size: 0.78rem;
 }
+#round-week-calendar .fc-timegrid-slot-label-cushion { font-size: 0.72rem; }
+#round-week-calendar .fc-event-title,
+#round-week-calendar .fc-event-time { font-size: 0.72rem; }

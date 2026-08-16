@@ -14,6 +14,7 @@
   <span class="legend-item"><span class="dot" style="background:{{ location.color }}"></span>{{ location.name }}</span>
   {% endfor %}
   <span class="legend-item"><span class="dot dot-pending"></span>승인 대기 (빗금)</span>
+  <span class="legend-item"><span class="dot" style="border:2px dashed var(--text-muted); background:transparent;"></span>상담 (점선 테두리)</span>
   <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선택한 회원의 가능 시간</span>
 </div>
 <div class="member-form" style="margin-bottom:12px;">
@@ -34,6 +35,12 @@
     <h2 id="modal-title">일정 등록</h2>
     <form id="event-form">
       <input type="hidden" id="event-id">
+      <label>종류
+        <select id="event-type">
+          <option value="PT">PT (기본 시간)</option>
+          <option value="상담">상담 (30분)</option>
+        </select>
+      </label>
       <label>회원
         <select id="event-member" required>
           {% for member in members %}

@@ -12,9 +12,20 @@ members_bp = Blueprint("members", __name__)
 @login_required
 def list_members():
     trainer = current_trainer()
-    members = Member.query.filter_by(trainer_id=trainer.id).order_by(Member.name).all()
+    members = (
+        Member.query.filter_by(trainer_id=trainer.id, is_deleted=False)
+        .order_by(Member.name)
+        .all()
+    )
+    deleted_members = (
+        Member.query.filter_by(trainer_id=trainer.id, is_deleted=True)
+        .order_by(Member.name)
+        .all()
+    )
     locations = Location.query.filter_by(trainer_id=trainer.id).order_by(Location.name).all()
-    return render_template("members.html", members=members, locations=locations)
+    return render_template(
+        "members.html", members=members, deleted_members=deleted_members, locations=locations
+    )
 
 
 @members_bp.route("/members", methods=["POST"])
@@ -68,11 +79,31 @@ def set_location(member_id):
     return redirect(url_for("members.list_members"))
 
 
+@members_bp.route("/members/<int:member_id>/memo", methods=["POST"])
+@login_required
+def set_memo(member_id):
+    trainer = current_trainer()
+    member = Member.query.filter_by(id=member_id, trainer_id=trainer.id).first_or_404()
+    member.memo = request.form.get("memo", "").strip() or None
+    db.session.commit()
+    return redirect(url_for("members.list_members"))
+
+
 @members_bp.route("/members/<int:member_id>/delete", methods=["POST"])
 @login_required
 def delete_member(member_id):
     trainer = current_trainer()
     member = Member.query.filter_by(id=member_id, trainer_id=trainer.id).first_or_404()
-    db.session.delete(member)
+    member.is_deleted = True
+    db.session.commit()
+    return redirect(url_for("members.list_members"))
+
+
+@members_bp.route("/members/<int:member_id>/restore", methods=["POST"])
+@login_required
+def restore_member(member_id):
+    trainer = current_trainer()
+    member = Member.query.filter_by(id=member_id, trainer_id=trainer.id).first_or_404()
+    member.is_deleted = False
     db.session.commit()
     return redirect(url_for("members.list_members"))

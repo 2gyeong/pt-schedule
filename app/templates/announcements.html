@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}공지사항{% endblock %}
+{% block content %}
+<h1>공지사항</h1>
+<p class="hint">여기에 등록하면 회원들이 "내 예약/가능 시간" 페이지 맨 위에서 볼 수 있어요.</p>
+
+<form method="post" action="{{ url_for('announcements.create_announcement') }}" class="member-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <textarea name="content" rows="3" required placeholder="회원들에게 전달할 공지 내용을 입력하세요."
+            style="width:100%; max-width:520px; font-family:inherit;"></textarea>
+  <button type="submit">등록</button>
+</form>
+
+<table class="member-table">
+  <thead>
+    <tr><th>내용</th><th>등록일</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for a in announcements %}
+    <tr>
+      <td>
+        <form method="post" action="{{ url_for('announcements.edit_announcement', announcement_id=a.id) }}"
+              style="display:flex; gap:6px; align-items:flex-start;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <textarea name="content" rows="2" required style="width:100%; max-width:420px; font-family:inherit;">{{ a.content }}</textarea>
+          <button type="submit" class="copy-link-btn">수정</button>
+        </form>
+      </td>
+      <td>{{ a.created_at.strftime("%y.%m.%d %H:%M") }}</td>
+      <td>
+        <form method="post" action="{{ url_for('announcements.delete_announcement', announcement_id=a.id) }}"
+              onsubmit="return confirm('삭제할까요?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="danger">삭제</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3">등록된 공지사항이 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

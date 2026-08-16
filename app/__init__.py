@@ -28,6 +28,7 @@ def create_app():
     from app.rounds import rounds_bp
     from app.admin import admin_bp
     from app.change_requests import change_requests_bp
+    from app.announcements import announcements_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(members_bp)
@@ -38,6 +39,7 @@ def create_app():
     app.register_blueprint(rounds_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(change_requests_bp)
+    app.register_blueprint(announcements_bp)
 
     @login_manager.user_loader
     def load_user(user_id):

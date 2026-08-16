@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}회원 관리{% endblock %}
 {% block content %}
-<h1>회원 관리</h1>
+<h1>회원 관리 <span style="color:var(--text-muted); font-weight:500; font-size:0.9rem;">(총 {{ members|length }}명)</span></h1>
 
 {% if not locations %}
 <p class="hint">회원을 등록하기 전에 <a href="{{ url_for('locations.list_locations') }}">지점을 먼저 등록</a>해주세요.</p>
@@ -22,11 +22,12 @@
 
 <table class="member-table">
   <thead>
-    <tr><th>이름</th><th>지점</th><th>잔여 횟수</th><th>메모</th><th>회원 비고</th><th>예약 링크</th><th></th></tr>
+    <tr><th>#</th><th>이름</th><th>지점</th><th>잔여 횟수</th><th>선생님 메모 (비공개)</th><th>회원 비고</th><th>예약 링크</th><th></th></tr>
   </thead>
   <tbody>
     {% for member in members %}
     <tr>
+      <td>{{ loop.index }}</td>
       <td>{{ member.name }}</td>
       <td>
         <form method="post" action="{{ url_for('members.set_location', member_id=member.id) }}">
@@ -49,27 +50,60 @@
           </form>
         </div>
       </td>
-      <td>{{ member.memo or "-" }}</td>
-      <td>{{ member.note or "-" }}</td>
       <td>
+        <form method="post" action="{{ url_for('members.set_memo', member_id=member.id) }}" class="quota-adjust">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="text" name="memo" value="{{ member.memo or '' }}" placeholder="선생님만 보는 메모" style="width:140px">
+          <button type="submit" class="copy-link-btn">저장</button>
+        </form>
+      </td>
+      <td>{{ member.note or "-" }}</td>
+      <td class="link-actions">
         <button type="button" class="copy-link-btn"
                 data-link="{{ url_for('booking.book_page', token=member.booking_token, _external=True) }}">
           링크 복사
         </button>
+        <a class="copy-link-btn" href="{{ url_for('booking.book_page', token=member.booking_token, _external=True) }}"
+           target="_blank" rel="noopener">바로가기</a>
       </td>
       <td>
         <form method="post" action="{{ url_for('members.delete_member', member_id=member.id) }}"
-              onsubmit="return confirm('삭제하면 이 회원의 일정도 함께 삭제됩니다. 계속할까요?');">
+              onsubmit="return confirm('목록에서 제거할까요? 데이터는 삭제되지 않고, 아래 \'삭제된 회원\'에서 복구할 수 있어요.');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="danger">삭제</button>
         </form>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7">등록된 회원이 없습니다.</td></tr>
+    <tr><td colspan="8">등록된 회원이 없습니다.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+
+{% if deleted_members %}
+<h2>삭제된 회원 ({{ deleted_members|length }}명)</h2>
+<p class="hint">데이터는 그대로 보관돼요. 다시 등록하려면 복구하세요.</p>
+<table class="member-table">
+  <thead>
+    <tr><th>이름</th><th>지점</th><th>잔여 횟수</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for member in deleted_members %}
+    <tr>
+      <td>{{ member.name }}</td>
+      <td>{{ member.location.name if member.location else "-" }}</td>
+      <td>{{ member.remaining_sessions }}</td>
+      <td>
+        <form method="post" action="{{ url_for('members.restore_member', member_id=member.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="copy-link-btn">복구</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>

@@ -4,6 +4,7 @@ from flask import Blueprint, abort, jsonify, redirect, render_template, request,
 
 from app import db
 from app.models import (
+    Announcement,
     ChangeRequest,
     Location,
     Member,
@@ -59,6 +60,11 @@ def book_page(token):
         r.event_id
         for r in ChangeRequest.query.filter_by(member_id=member.id, status="대기").all()
     }
+    announcements = (
+        Announcement.query.filter_by(trainer_id=member.trainer_id)
+        .order_by(Announcement.created_at.desc())
+        .all()
+    )
 
     return render_template(
         "booking.html",
@@ -70,6 +76,7 @@ def book_page(token):
         already_submitted=already_submitted,
         confirmed_events=confirmed_events,
         change_pending_event_ids=change_pending_event_ids,
+        announcements=announcements,
         schedule_start_hour=trainer.schedule_start_hour,
         schedule_end_hour=trainer.schedule_end_hour,
     )

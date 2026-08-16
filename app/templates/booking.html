@@ -16,6 +16,16 @@
 
 <h1>{{ member.name }}님</h1>
 
+{% if announcements %}
+<div class="callout" style="margin-bottom:22px;">
+  <ul>
+    {% for a in announcements %}
+    <li style="white-space:pre-wrap;">{{ a.content }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <div id="confirmed-events-section" {% if not confirmed_events %}class="hidden"{% endif %}>
   <h2>확정된 예약</h2>
   <ul class="submission-list" id="confirmed-events-list">
@@ -76,7 +86,7 @@
 <p class="hint">몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 적어주세요.</p>
 <form method="post" action="{{ url_for('booking.save_note', token=member.booking_token) }}" class="member-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <textarea name="note" rows="3" style="width:100%; max-width:480px; font-family:inherit;" placeholder="예: 무릎이 안 좋아서 하체 운동은 조심스럽게 부탁드려요">{{ member.note or "" }}</textarea>
+  <textarea name="note" rows="3" style="width:100%; max-width:480px; font-family:inherit;" placeholder="몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 적어주세요.">{{ member.note or "" }}</textarea>
   <button type="submit">저장</button>
 </form>
 
