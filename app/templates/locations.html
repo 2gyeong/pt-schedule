@@ -2,29 +2,31 @@
 {% block title %}지점 관리{% endblock %}
 {% block content %}
 <h1>지점 관리</h1>
-<p class="hint">카카오맵/구글맵에서 지점 위치를 우클릭하면 위도·경도 좌표를 복사할 수 있습니다.</p>
 
 <form method="post" action="{{ url_for('locations.create_location') }}" class="member-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="text" name="name" placeholder="지점 이름 *" required>
-  <input type="text" name="lat" placeholder="위도 (예: 37.5012)" required>
-  <input type="text" name="lng" placeholder="경도 (예: 127.0396)" required>
   <button type="submit">등록</button>
 </form>
 
 <table class="member-table">
   <thead>
-    <tr><th>이름</th><th>위도</th><th>경도</th><th>달력 색상</th><th></th></tr>
+    <tr><th>이름</th><th>달력 색상</th><th></th></tr>
   </thead>
   <tbody>
     {% for location in locations %}
     <tr>
-      <td>{{ location.name }}</td>
-      <td>{{ location.lat }}</td>
-      <td>{{ location.lng }}</td>
       <td>
-        <form method="post" action="{{ url_for('locations.set_color', location_id=location.id) }}">
+        <form method="post" action="{{ url_for('locations.set_name', location_id=location.id) }}" style="display:flex; gap:6px;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="text" name="name" value="{{ location.name }}" style="width:140px"
+                 onchange="this.form.submit()">
+        </form>
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('locations.set_color', location_id=location.id) }}" style="display:flex; align-items:center; gap:10px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <span style="display:inline-block; width:28px; height:28px; border-radius:8px; background:{{ location.color }}; border:1px solid var(--border-soft); flex:none;"></span>
           <input type="color" name="color" value="{{ location.color }}" onchange="this.form.submit()">
         </form>
       </td>
@@ -37,7 +39,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5">등록된 지점이 없습니다.</td></tr>
+    <tr><td colspan="3">등록된 지점이 없습니다.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -46,8 +48,8 @@
 <h2>지점 간 실제 이동 시간</h2>
 <div class="callout">
   <ul>
-    <li>비워두면 지점 좌표 기반으로 자동 계산된 이동 시간을 사용해요.</li>
-    <li>직접 입력하면 그 값을 우선으로 써요. 실제 대중교통 이동 시간을 아시면 입력해주세요.</li>
+    <li>지점 사이 실제 대중교통 이동 시간을 분 단위로 입력해주세요.</li>
+    <li>비워두면 안전하게 넉넉한 기본값으로 계산되니, 정확한 스케줄링을 위해 입력해주시는 걸 추천해요.</li>
   </ul>
 </div>
 <form method="post" action="{{ url_for('locations.save_travel_times') }}">
@@ -63,7 +65,7 @@
         <td>
           <input type="number" name="travel_{{ row.key }}" min="0" step="1"
                  value="{{ row.minutes if row.minutes is not none else '' }}"
-                 placeholder="자동 계산: {{ row.auto_minutes }}분" style="width:140px">
+                 placeholder="이동 시간(분) 입력" style="width:140px">
         </td>
       </tr>
       {% endfor %}

@@ -1,4 +1,3 @@
-import math
 from datetime import date, datetime, time, timedelta
 
 from app import db
@@ -15,15 +14,6 @@ from app.models import (
 )
 
 
-def haversine_km(lat1, lng1, lat2, lng2):
-    r = 6371.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lng2 - lng1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
-
-
 def _to_dt(d: date, t: time) -> datetime:
     return datetime.combine(d, t)
 
@@ -38,35 +28,28 @@ def _intersect(start_a, end_a, start_b, end_b):
     return (start, end) if start < end else None
 
 
-def _distance(loc_a, loc_b) -> float:
-    if loc_a is None or loc_b is None or loc_a.id == loc_b.id:
-        return 0.0
-    return haversine_km(loc_a.lat, loc_a.lng, loc_b.lat, loc_b.lng)
-
-
-AVG_TRAVEL_SPEED_KMH = 15  # 선생님이 대중교통으로 이동 (직선거리 기준 실효 속도, 환승 등 포함해 보수적으로 가정)
-MIN_TRAVEL_BUFFER_MIN = 20  # 지점이 달라지면, 아무리 가까워도 도보+대기 등 고정 오버헤드로 최소 이 정도는 비워둠
+DEFAULT_TRAVEL_MIN = 30  # 지점 간 실제 이동 시간을 아직 입력하지 않았을 때 쓰는 보수적인 기본값
 MAX_GAP_MIN = 60  # 같은 날 세션 사이에 이 시간(분)보다 더 비지 않게 한다 (공강처럼 빈 시간 방지)
 
 
 def load_travel_overrides(trainer_id):
-    """선생님이 직접 입력해둔 지점 간(또는 집-지점 간) 이동 시간을 조회 편의를 위해
-    {frozenset({location_a_id_or_None, location_b_id_or_None}): 분} 형태로 미리 불러온다."""
+    """선생님이 직접 입력해둔 지점 간 실제 이동 시간을 조회 편의를 위해
+    {frozenset({location_a_id, location_b_id}): 분} 형태로 미리 불러온다."""
     rows = TravelTime.query.filter_by(trainer_id=trainer_id).all()
     return {frozenset({r.location_a_id, r.location_b_id}): r.minutes for r in rows}
 
 
 def _travel_minutes(loc_a, loc_b, overrides=None) -> int:
     """서로 다른 지점 사이를 이동하는 데 필요한 최소 시간(분). 같은 지점이면 0.
-    선생님이 직접 입력해둔 실제 이동 시간이 있으면 그 값을 우선 사용한다."""
+    선생님이 직접 입력해둔 실제 이동 시간이 있으면 그 값을 그대로 쓰고, 아직 입력하지 않았으면
+    보수적인 기본값을 쓴다 (지점 위치 좌표에 의존하지 않음)."""
     if loc_a is None or loc_b is None or loc_a.id == loc_b.id:
         return 0
     if overrides:
         key = frozenset({loc_a.id, loc_b.id})
         if key in overrides:
             return overrides[key]
-    km = haversine_km(loc_a.lat, loc_a.lng, loc_b.lat, loc_b.lng)
-    return max(MIN_TRAVEL_BUFFER_MIN, math.ceil(km / AVG_TRAVEL_SPEED_KMH * 60))
+    return DEFAULT_TRAVEL_MIN
 
 
 def _location_pattern_ok(day_entries, cursor, slot_end, location) -> bool:
@@ -128,10 +111,10 @@ def _has_conflict(day_entries, cursor, slot_end, location, overrides=None) -> bo
     return False
 
 
-def _insertion_cost(day_entries, start_dt, end_dt, location, preferred_start_location=None):
+def _insertion_cost(day_entries, start_dt, end_dt, location, preferred_start_location=None, overrides=None):
     """day_entries: sorted list of (start_dt, end_dt, location). Cost of inserting
     a new session at [start_dt, end_dt] with the given location, based on the
-    extra travel distance versus its immediate neighbors in time. If this would be
+    extra travel time versus its immediate neighbors in time. If this would be
     the first session of the day, prefer the trainer's configured starting location
     for that weekday (if any)."""
     before = None
@@ -144,15 +127,15 @@ def _insertion_cost(day_entries, start_dt, end_dt, location, preferred_start_loc
             if after is None or entry_start < after[0]:
                 after = (entry_start, entry_end, entry_loc)
 
-    cost = 0.0
+    cost = 0
     if before is not None:
-        cost += _distance(before[2], location)
+        cost += _travel_minutes(before[2], location, overrides)
     if after is not None:
-        cost += _distance(location, after[2])
+        cost += _travel_minutes(location, after[2], overrides)
     if before is not None and after is not None:
-        cost -= _distance(before[2], after[2])
+        cost -= _travel_minutes(before[2], after[2], overrides)
     if before is None and after is None and preferred_start_location is not None:
-        cost += _distance(preferred_start_location, location)
+        cost += _travel_minutes(preferred_start_location, location, overrides)
     return cost
 
 
@@ -194,7 +177,7 @@ def _find_best_slot(
             if not is_blacked_out(window_date, cursor, slot_end):
                 day_entries = day_timeline.get(window_date, [])
                 if not _has_conflict(day_entries, cursor, slot_end, location, overrides):
-                    cost = _insertion_cost(day_entries, cursor, slot_end, location, preferred_start)
+                    cost = _insertion_cost(day_entries, cursor, slot_end, location, preferred_start, overrides)
                     if best is None or cost < best[0]:
                         best = (cost, window_date, cursor, slot_end)
             cursor += step

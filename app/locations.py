@@ -4,7 +4,6 @@ from flask_login import login_required
 from app import db
 from app.context import current_trainer
 from app.models import Location, TravelTime
-from app.scheduling import _travel_minutes
 
 locations_bp = Blueprint("locations", __name__)
 
@@ -37,7 +36,6 @@ def list_locations():
             "a_name": loc_a.name,
             "b_name": loc_b.name,
             "minutes": existing.get(frozenset({loc_a.id, loc_b.id})),
-            "auto_minutes": _travel_minutes(loc_a, loc_b),
         }
         for loc_a, loc_b in pairs
     ]
@@ -50,13 +48,23 @@ def list_locations():
 def create_location():
     trainer = current_trainer()
     name = request.form.get("name", "").strip()
-    lat = request.form.get("lat", "").strip()
-    lng = request.form.get("lng", "").strip()
-    if name and lat and lng:
+    if name:
         count = Location.query.filter_by(trainer_id=trainer.id).count()
         color = COLOR_PALETTE[count % len(COLOR_PALETTE)]
-        location = Location(name=name, lat=float(lat), lng=float(lng), color=color, trainer_id=trainer.id)
+        location = Location(name=name, lat=0.0, lng=0.0, color=color, trainer_id=trainer.id)
         db.session.add(location)
+        db.session.commit()
+    return redirect(url_for("locations.list_locations"))
+
+
+@locations_bp.route("/locations/<int:location_id>/name", methods=["POST"])
+@login_required
+def set_name(location_id):
+    trainer = current_trainer()
+    location = Location.query.filter_by(id=location_id, trainer_id=trainer.id).first_or_404()
+    name = request.form.get("name", "").strip()
+    if name:
+        location.name = name
         db.session.commit()
     return redirect(url_for("locations.list_locations"))
 
