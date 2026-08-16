@@ -16,27 +16,50 @@
 
 <h1>{{ member.name }}님</h1>
 
-{% if confirmed_events %}
-<h2>확정된 예약</h2>
-<ul class="submission-list">
-  {% for e in confirmed_events %}
-  <li>{{ e.date.isoformat() }} {{ e.start_time.strftime("%H:%M") }}~{{ e.end_time.strftime("%H:%M") }}
-    {% if e.location %} @ {{ e.location.name }}{% endif %}</li>
-  {% endfor %}
-</ul>
-{% endif %}
+<div id="confirmed-events-section" {% if not confirmed_events %}class="hidden"{% endif %}>
+  <h2>확정된 예약</h2>
+  <ul class="submission-list" id="confirmed-events-list">
+    {% for e in confirmed_events %}
+    <li>
+      <span>{{ e.date.isoformat() }} {{ e.start_time.strftime("%H:%M") }}~{{ e.end_time.strftime("%H:%M") }}
+        {% if e.location %} @ {{ e.location.name }}{% endif %}</span>
+      {% if e.id in change_pending_event_ids %}
+      <span class="pending">수정 요청 대기중</span>
+      {% else %}
+      <button type="button" class="copy-link-btn change-request-btn"
+              data-event-id="{{ e.id }}" data-date="{{ e.date.isoformat() }}"
+              data-start="{{ e.start_time.strftime('%H:%M') }}" data-end="{{ e.end_time.strftime('%H:%M') }}">
+        수정 요청
+      </button>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
 
 <h2>내 고정 가능 시간</h2>
 
 {% if upcoming_round %}
-<p class="hint">
-  진행 중인 라운드가 있어요 (기간: {{ upcoming_round.start_date.isoformat() }} ~ {{ upcoming_round.end_date.isoformat() }}).
-  {% if already_submitted %}
-  <strong style="color:#27ae60">이번 라운드에 제출 완료했어요.</strong> 시간을 바꾸고 다시 저장하면 재제출됩니다.
-  {% else %}
-  <strong style="color:#c0392b">아직 이번 라운드에 제출하지 않았어요.</strong> 아래 시간을 선택(또는 확인)하고 저장/제출 버튼을 눌러야 선생님이 계산할 때 포함됩니다.
-  {% endif %}
-</p>
+<div class="status-card">
+  <div class="status-card-top">
+    <span class="status-card-title">
+      {{ upcoming_round.start_date.month }}월 {{ ((upcoming_round.start_date.day - 1) // 7) + 1 }}주차
+      ({{ upcoming_round.start_date.strftime('%y.%m.%d') }}~{{ upcoming_round.end_date.strftime('%y.%m.%d') }}) 예약 페이지입니다
+    </span>
+    {% if already_submitted %}
+    <span class="status-badge status-제출완료">제출완료</span>
+    {% else %}
+    <span class="status-badge status-미제출">미제출</span>
+    {% endif %}
+  </div>
+  <p class="status-card-desc">
+    {% if already_submitted %}
+    이번 회차에 제출 완료했어요. 시간을 바꾸고 다시 저장하면 재제출됩니다.
+    {% else %}
+    아직 이번 회차에 제출하지 않았어요. 아래 시간을 선택(또는 확인)하고 저장/제출 버튼을 눌러야 선생님이 계산할 때 포함됩니다.
+    {% endif %}
+  </p>
+</div>
 {% endif %}
 
 {% if not trainer_blocks %}
@@ -58,23 +81,29 @@
 </form>
 
 <h2>급하게 개별 요청하기</h2>
-<p class="hint">고정 시간과 별개로 특정 날짜에 급하게 요청하고 싶으면 아래 달력에서 빈 날짜를 클릭하세요. 회색은 이미 예약된 시간입니다.</p>
-<div id="calendar" data-token="{{ member.booking_token }}"></div>
+<p class="hint">고정 시간과 별개로 특정 날짜에 급하게 요청하고 싶으면 아래 달력에서 빈 날짜를 클릭하세요.</p>
+<div class="legend">
+  <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선생님 가능 시간</span>
+  <span class="legend-item"><span class="dot" style="background:#bbb"></span>이미 예약된 시간</span>
+</div>
+<p id="change-mode-hint" class="callout hidden"></p>
+<div id="calendar" data-token="{{ member.booking_token }}"
+     data-start-hour="{{ schedule_start_hour }}" data-end-hour="{{ schedule_end_hour }}"></div>
 
 <div id="request-modal" class="modal hidden">
   <div class="modal-box">
-    <h2>예약 요청</h2>
+    <h2 id="request-modal-title">예약 요청</h2>
     <form id="request-form">
       <label>날짜 <input type="date" id="req-date" required></label>
       <label>시작 시간 <input type="time" id="req-start" required></label>
-      <label>종료 시간 <input type="time" id="req-end" required></label>
+      <p class="hint" id="req-end-preview"></p>
       <label>메모 <input type="text" id="req-memo" placeholder="선택사항"></label>
       <div class="modal-actions">
         <button type="submit">요청 보내기</button>
         <button type="button" id="req-cancel-btn">취소</button>
       </div>
     </form>
-    <p id="request-success" class="hidden">요청이 접수되었습니다. 선생님 승인 후 확정됩니다.</p>
+    <p id="request-success" class="hidden">요청이 접수되었습니다.</p>
   </div>
 </div>
 {% endblock %}
@@ -86,9 +115,54 @@
     constraint: {{ trainer_blocks | tojson }},
     saveUrl: "{{ url_for('booking.save_recurring', token=member.booking_token) }}",
     csrfToken: document.querySelector('meta[name="csrf-token"]').getAttribute("content"),
-    saveLabel: {{ "이번 라운드 제출하기" | tojson if upcoming_round else "저장" | tojson }},
+    saveLabel: {{ "이번 회차 제출하기" | tojson if upcoming_round else "저장" | tojson }},
     reloadOnSave: {{ "true" if upcoming_round else "false" }},
+    startHour: {{ schedule_start_hour }},
+    endHour: {{ schedule_end_hour }},
   });
+</script>
+<script>
+  (function () {
+    const section = document.getElementById("confirmed-events-section");
+    const list = document.getElementById("confirmed-events-list");
+    const token = "{{ member.booking_token }}";
+
+    function renderEvents(events) {
+      if (!events.length) {
+        section.classList.add("hidden");
+        list.innerHTML = "";
+        return;
+      }
+      section.classList.remove("hidden");
+      list.innerHTML = events
+        .map(function (e) {
+          const loc = e.location_name ? ` @ ${e.location_name}` : "";
+          const action = e.change_pending
+            ? `<span class="pending">수정 요청 대기중</span>`
+            : `<button type="button" class="copy-link-btn change-request-btn"
+                 data-event-id="${e.id}" data-date="${e.date}" data-start="${e.start_time}" data-end="${e.end_time}">수정 요청</button>`;
+          return `<li><span>${e.date} ${e.start_time}~${e.end_time}${loc}</span>${action}</li>`;
+        })
+        .join("");
+    }
+
+    function refreshConfirmedEvents() {
+      fetch(`/book/${token}/confirmed`)
+        .then((res) => res.json())
+        .then(renderEvents);
+    }
+    window.refreshConfirmedEvents = refreshConfirmedEvents;
+
+    setInterval(refreshConfirmedEvents, 20000);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") refreshConfirmedEvents();
+    });
+
+    list.addEventListener("click", function (e) {
+      const btn = e.target.closest(".change-request-btn");
+      if (btn && window.startChangeMode) window.startChangeMode(btn);
+    });
+  })();
 </script>
 <script src="{{ url_for('static', filename='js/booking.js') }}"></script>
 {% endblock %}

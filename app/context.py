@@ -1,7 +1,7 @@
 from flask import session
 from flask_login import current_user
 
-from app.models import Trainer
+from app.models import ChangeRequest, Trainer
 
 
 def current_trainer():
@@ -13,3 +13,12 @@ def current_trainer():
             if impersonated:
                 return impersonated
     return current_user
+
+
+def pending_change_requests_count():
+    if not current_user.is_authenticated:
+        return 0
+    trainer = current_trainer()
+    if not isinstance(trainer, Trainer) or trainer.role != "trainer":
+        return 0
+    return ChangeRequest.query.filter_by(trainer_id=trainer.id, status="대기").count()

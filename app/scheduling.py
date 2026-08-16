@@ -10,6 +10,7 @@ from app.models import (
     RoundSubmission,
     ScheduleEvent,
     TrainerBlackout,
+    WeekdayStartLocation,
 )
 
 
@@ -70,10 +71,12 @@ def _has_conflict(day_entries, cursor, slot_end, location) -> bool:
     return False
 
 
-def _insertion_cost(day_entries, start_dt, end_dt, location):
+def _insertion_cost(day_entries, start_dt, end_dt, location, preferred_start_location=None):
     """day_entries: sorted list of (start_dt, end_dt, location). Cost of inserting
     a new session at [start_dt, end_dt] with the given location, based on the
-    extra travel distance versus its immediate neighbors in time."""
+    extra travel distance versus its immediate neighbors in time. If this would be
+    the first session of the day, prefer the trainer's configured starting location
+    for that weekday (if any)."""
     before = None
     after = None
     for entry_start, entry_end, entry_loc in day_entries:
@@ -91,6 +94,8 @@ def _insertion_cost(day_entries, start_dt, end_dt, location):
         cost += _distance(location, after[2])
     if before is not None and after is not None:
         cost -= _distance(before[2], after[2])
+    if before is None and after is None and preferred_start_location is not None:
+        cost += _distance(preferred_start_location, location)
     return cost
 
 
@@ -101,16 +106,35 @@ def _dates_in_range(start_date, end_date):
         d += timedelta(days=1)
 
 
-def _find_best_slot(windows, day_timeline, location, session_len, step, is_blacked_out):
+def _merge_intervals(intervals):
+    """(start_dt, end_dt) 구간 목록을 겹치거나 맞닿은 것끼리 하나로 합친다.
+    회원 가능 시간이 1시간 단위 블록 여러 개로 저장되어 있어도, 연속된 블록이면
+    하나의 긴 구간으로 취급해야 그 경계를 넘나드는 세션 시작 시간(예: :20, :40)도 찾을 수 있다."""
+    if not intervals:
+        return []
+    ivs = sorted(intervals)
+    merged = [ivs[0]]
+    for start, end in ivs[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _find_best_slot(windows, day_timeline, location, session_len, step, is_blacked_out, start_location_by_weekday=None):
     best = None  # (cost, date, start_dt, end_dt)
+    start_location_by_weekday = start_location_by_weekday or {}
     for window_date, w_start_dt, w_end_dt in windows:
+        preferred_start = start_location_by_weekday.get(window_date.weekday())
         cursor = w_start_dt
         while cursor + session_len <= w_end_dt:
             slot_end = cursor + session_len
             if not is_blacked_out(window_date, cursor, slot_end):
                 day_entries = day_timeline.get(window_date, [])
                 if not _has_conflict(day_entries, cursor, slot_end, location):
-                    cost = _insertion_cost(day_entries, cursor, slot_end, location)
+                    cost = _insertion_cost(day_entries, cursor, slot_end, location, preferred_start)
                     if best is None or cost < best[0]:
                         best = (cost, window_date, cursor, slot_end)
             cursor += step
@@ -144,6 +168,59 @@ def _pick_spaced_days(feasible_days, count):
         return None
 
     return greedy_pick(2) or greedy_pick(1)
+
+
+def _subtract_busy(start, end, busy_intervals):
+    """[start,end) 구간에서 busy_intervals와 겹치는 부분을 모두 제거한 남은 구간들을 반환."""
+    free = [(start, end)]
+    for b_start, b_end in busy_intervals:
+        next_free = []
+        for f_start, f_end in free:
+            if b_end <= f_start or b_start >= f_end:
+                next_free.append((f_start, f_end))
+                continue
+            if b_start > f_start:
+                next_free.append((f_start, b_start))
+            if b_end < f_end:
+                next_free.append((b_end, f_end))
+        free = next_free
+    return free
+
+
+def trainer_open_background(trainer_id, start_date, end_date):
+    """선생님의 반복 가능 시간에서 특정 날짜 예외(블랙아웃)와 이미 예약된 시간을 뺀,
+    실제로 비어있는 구간을 (날짜, 시작, 종료) 목록으로 반환. 회원이 급하게 개별 요청하거나
+    예약 변경을 요청할 때, 실제로 고를 수 있는 시간대를 보여주는 용도."""
+    trainer_by_weekday = {}
+    for t in RecurringTrainerAvailability.query.filter_by(trainer_id=trainer_id).all():
+        trainer_by_weekday.setdefault(t.weekday, []).append((t.start_time, t.end_time))
+
+    blackouts = TrainerBlackout.query.filter_by(trainer_id=trainer_id).all()
+    existing = ScheduleEvent.query.filter(
+        ScheduleEvent.trainer_id == trainer_id,
+        ScheduleEvent.status.in_(["확정", "완료", "요청"]),
+    ).all()
+    busy_by_date = {}
+    for e in existing:
+        busy_by_date.setdefault(e.date, []).append(
+            (_to_dt(e.date, e.start_time), _to_dt(e.date, e.end_time))
+        )
+
+    result = []
+    for d in _dates_in_range(start_date, end_date):
+        blocks = trainer_by_weekday.get(d.weekday(), [])
+        if not blocks:
+            continue
+        intervals = [(_to_dt(d, s), _to_dt(d, e)) for s, e in blocks]
+        busy = list(busy_by_date.get(d, []))
+        busy += [
+            (_to_dt(d, b.start_time), _to_dt(d, b.end_time)) for b in blackouts if b.date == d
+        ]
+        for start, end in _merge_intervals(intervals):
+            for free_start, free_end in _subtract_busy(start, end, busy):
+                result.append((d, free_start.time(), free_end.time()))
+
+    return result
 
 
 def member_available_background(trainer_id, member_id, start_date, end_date):
@@ -189,11 +266,29 @@ def member_available_background(trainer_id, member_id, start_date, end_date):
     return result
 
 
+def slot_conflicts(trainer_id, d, start_time, end_time, location, exclude_event_id=None):
+    """이 트레이너의 다른 예약들과 시간이 겹치거나 지점 간 이동시간이 부족하면 True.
+    회원의 예약 변경 요청을 선생님이 수락할 때, 그 시간이 실제로 가능한지 확인하는 데 사용."""
+    start_dt = _to_dt(d, start_time)
+    end_dt = _to_dt(d, end_time)
+    day_entries = []
+    existing = ScheduleEvent.query.filter(
+        ScheduleEvent.trainer_id == trainer_id,
+        ScheduleEvent.date == d,
+        ScheduleEvent.status.in_(["확정", "완료", "요청"]),
+    ).all()
+    for e in existing:
+        if exclude_event_id and e.id == exclude_event_id:
+            continue
+        day_entries.append((_to_dt(e.date, e.start_time), _to_dt(e.date, e.end_time), e.location))
+    return _has_conflict(day_entries, start_dt, end_dt, location)
+
+
 def valid_slots_for_member(round_obj, member_id, exclude_event_id=None):
     """이 라운드 기간 동안 해당 회원이 실제로 배정 가능한 (날짜, 시작, 종료) 후보를 모두 반환.
     선생님이 배정 결과를 수동으로 조정할 때, 고를 수 있는 선택지를 제한하는 데 사용."""
     session_len = timedelta(minutes=round_obj.session_minutes)
-    step = timedelta(minutes=15)
+    step = timedelta(minutes=10)
     dates = list(_dates_in_range(round_obj.start_date, round_obj.end_date))
 
     member = Member.query.filter_by(id=member_id, trainer_id=round_obj.trainer_id).first()
@@ -228,27 +323,37 @@ def valid_slots_for_member(round_obj, member_id, exclude_event_id=None):
             member_other_dates.add(e.date)
 
     recurring = RecurringAvailability.query.filter_by(member_id=member_id).all()
+    member_by_weekday = {}
+    for r in recurring:
+        member_by_weekday.setdefault(r.weekday, []).append((r.start_time, r.end_time))
 
     slots = []
-    for r in recurring:
-        for d in dates:
-            if d.weekday() != r.weekday or d in member_other_dates:
-                continue
-            for t_start, t_end in trainer_by_weekday.get(r.weekday, []):
+    for d in dates:
+        if d in member_other_dates:
+            continue
+        weekday = d.weekday()
+        member_blocks = member_by_weekday.get(weekday, [])
+        trainer_blocks = trainer_by_weekday.get(weekday, [])
+        if not member_blocks or not trainer_blocks:
+            continue
+        overlaps = []
+        for m_start, m_end in member_blocks:
+            for t_start, t_end in trainer_blocks:
                 overlap = _intersect(
-                    _to_dt(d, r.start_time), _to_dt(d, r.end_time),
+                    _to_dt(d, m_start), _to_dt(d, m_end),
                     _to_dt(d, t_start), _to_dt(d, t_end),
                 )
-                if not overlap:
-                    continue
-                cursor = overlap[0]
-                while cursor + session_len <= overlap[1]:
-                    slot_end = cursor + session_len
-                    if not is_blacked_out(d, cursor, slot_end):
-                        day_entries = day_timeline.get(d, [])
-                        if not _has_conflict(day_entries, cursor, slot_end, member.location):
-                            slots.append((d, cursor.time(), slot_end.time()))
-                    cursor += step
+                if overlap:
+                    overlaps.append(overlap)
+        for start, end in _merge_intervals(overlaps):
+            cursor = start
+            while cursor + session_len <= end:
+                slot_end = cursor + session_len
+                if not is_blacked_out(d, cursor, slot_end):
+                    day_entries = day_timeline.get(d, [])
+                    if not _has_conflict(day_entries, cursor, slot_end, member.location):
+                        slots.append((d, cursor.time(), slot_end.time()))
+                cursor += step
 
     return sorted(set(slots))
 
@@ -258,7 +363,7 @@ def generate_schedule(round_obj):
     반환값: (assigned 이벤트 목록, [(member, 부족한 횟수, 이유), ...])
     """
     session_len = timedelta(minutes=round_obj.session_minutes)
-    step = timedelta(minutes=15)
+    step = timedelta(minutes=10)
 
     # 재실행 지원: 이 라운드에서 이전에 생성했던 '요청' 상태 제안은 지우고 다시 계산
     ScheduleEvent.query.filter_by(round_id=round_obj.id, status="요청").delete()
@@ -285,6 +390,12 @@ def generate_schedule(round_obj):
     for t in trainer_availability:
         trainer_by_weekday.setdefault(t.weekday, []).append((t.start_time, t.end_time))
 
+    # 요일별로 그날 첫 세션을 시작하고 싶은 지점 (선생님이 지정, 계속 유지됨)
+    start_location_by_weekday = {
+        s.weekday: s.location
+        for s in WeekdayStartLocation.query.filter_by(trainer_id=round_obj.trainer_id).all()
+    }
+
     def is_blacked_out(d, start_dt, end_dt):
         for b in one_off_blackouts:
             if b.date == d and _overlaps(start_dt, end_dt, _to_dt(d, b.start_time), _to_dt(d, b.end_time)):
@@ -305,18 +416,31 @@ def generate_schedule(round_obj):
         if submitted_member_ids
         else []
     )
-    by_member = {}
+    member_blocks_by_member_weekday = {}
     for r in recurring:
+        member_blocks_by_member_weekday.setdefault((r.member_id, r.weekday), []).append(
+            (r.start_time, r.end_time)
+        )
+
+    by_member = {}
+    for (member_id, weekday), member_blocks in member_blocks_by_member_weekday.items():
+        trainer_blocks = trainer_by_weekday.get(weekday, [])
+        if not trainer_blocks:
+            continue
         for d in dates:
-            if d.weekday() != r.weekday:
+            if d.weekday() != weekday:
                 continue
-            for t_start, t_end in trainer_by_weekday.get(r.weekday, []):
-                overlap = _intersect(
-                    _to_dt(d, r.start_time), _to_dt(d, r.end_time),
-                    _to_dt(d, t_start), _to_dt(d, t_end),
-                )
-                if overlap:
-                    by_member.setdefault(r.member_id, []).append((d, overlap[0], overlap[1]))
+            overlaps = []
+            for m_start, m_end in member_blocks:
+                for t_start, t_end in trainer_blocks:
+                    overlap = _intersect(
+                        _to_dt(d, m_start), _to_dt(d, m_end),
+                        _to_dt(d, t_start), _to_dt(d, t_end),
+                    )
+                    if overlap:
+                        overlaps.append(overlap)
+            for start, end in _merge_intervals(overlaps):
+                by_member.setdefault(member_id, []).append((d, start, end))
 
     # 이번 라운드 회원별 희망 횟수 (잔여 횟수를 넘지 않게 제한)
     quotas = {q.member_id: q.count for q in RoundQuota.query.filter_by(round_id=round_obj.id).all()}
@@ -356,7 +480,9 @@ def generate_schedule(round_obj):
         done = 0
         for target_date in target_days:
             day_windows = [w for w in windows if w[0] == target_date]
-            best = _find_best_slot(day_windows, day_timeline, location, session_len, step, is_blacked_out)
+            best = _find_best_slot(
+                day_windows, day_timeline, location, session_len, step, is_blacked_out, start_location_by_weekday
+            )
             if best is None:
                 continue
             _, best_date, best_start, best_end = best

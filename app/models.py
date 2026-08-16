@@ -13,6 +13,8 @@ class Trainer(db.Model, UserMixin):
     role = db.Column(db.String(10), nullable=False, default="trainer")  # trainer / admin
     status = db.Column(db.String(20), nullable=False, default="대기")  # 대기 / 승인됨 / 거절됨
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    schedule_start_hour = db.Column(db.Integer, nullable=False, default=6)  # 가능 시간 표에 표시할 시작 시각
+    schedule_end_hour = db.Column(db.Integer, nullable=False, default=22)  # 가능 시간 표에 표시할 종료 시각(미포함)
 
 
 class Location(db.Model):
@@ -21,7 +23,7 @@ class Location(db.Model):
     name = db.Column(db.String(50), nullable=False)
     lat = db.Column(db.Float, nullable=False)
     lng = db.Column(db.Float, nullable=False)
-    color = db.Column(db.String(7), nullable=False, default="#2c6fbb")
+    color = db.Column(db.String(7), nullable=False, default="#7c98c2")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -68,6 +70,17 @@ class RecurringTrainerAvailability(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class WeekdayStartLocation(db.Model):
+    """요일별로 선생님이 그날 첫 세션을 시작하고 싶은 지점 (요일 0=월 ~ 6=일). 한 번 정하면 계속 유지됨."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"), nullable=False)
+    weekday = db.Column(db.Integer, nullable=False)
+    location_id = db.Column(db.Integer, db.ForeignKey("location.id"), nullable=False)
+
+    location = db.relationship("Location")
+
+
 class RecurringAvailability(db.Model):
     """회원이 매주 반복해서 가능한 시간 블록 (요일 0=월 ~ 6=일)."""
 
@@ -84,7 +97,7 @@ class SchedulingRound(db.Model):
     trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"))
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
-    session_minutes = db.Column(db.Integer, default=60)
+    session_minutes = db.Column(db.Integer, default=50)
     status = db.Column(db.String(20), default="대기")  # 대기 / 계산됨 / 확정
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -134,3 +147,21 @@ class ScheduleEvent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     location = db.relationship("Location")
+
+
+class ChangeRequest(db.Model):
+    """회원이 이미 확정된 예약의 날짜/시간 변경을 요청한 건."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"), nullable=False)
+    event_id = db.Column(db.Integer, db.ForeignKey("schedule_event.id"), nullable=False)
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=False)
+    requested_date = db.Column(db.Date, nullable=False)
+    requested_start_time = db.Column(db.Time, nullable=False)
+    requested_end_time = db.Column(db.Time, nullable=False)
+    memo = db.Column(db.String(255))
+    status = db.Column(db.String(20), default="대기")  # 대기 / 수락됨 / 거절됨
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    event = db.relationship("ScheduleEvent")
+    member = db.relationship("Member")

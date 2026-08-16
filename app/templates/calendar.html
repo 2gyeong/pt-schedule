@@ -14,7 +14,7 @@
   <span class="legend-item"><span class="dot" style="background:{{ location.color }}"></span>{{ location.name }}</span>
   {% endfor %}
   <span class="legend-item"><span class="dot dot-pending"></span>승인 대기 (빗금)</span>
-  <span class="legend-item"><span class="dot" style="background:#8ee6a0"></span>선택한 회원의 가능 시간</span>
+  <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선택한 회원의 가능 시간</span>
 </div>
 <div class="member-form" style="margin-bottom:12px;">
   <label>회원 보기
@@ -27,7 +27,7 @@
   </label>
 </div>
 <button type="button" id="new-event-btn">+ 새 일정 등록 (오늘)</button>
-<div id="calendar"></div>
+<div id="calendar" data-start-hour="{{ current_trainer().schedule_start_hour }}" data-end-hour="{{ current_trainer().schedule_end_hour }}"></div>
 
 <div id="event-modal" class="modal hidden">
   <div class="modal-box">

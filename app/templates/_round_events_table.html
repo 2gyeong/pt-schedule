@@ -1,0 +1,41 @@
+<h2>배정 결과</h2>
+<p class="hint">"요청" 상태인 건은 회원이 가능하다고 설정한 시간 중에서만 다른 시간으로 바꿀 수 있어요.</p>
+<table class="member-table">
+  <thead>
+    <tr><th>회원</th><th>날짜</th><th>시간</th><th>지점</th><th>상태</th><th>수정</th></tr>
+  </thead>
+  <tbody>
+    {% for e in events %}
+    <tr>
+      <td>{{ e.member.name }}</td>
+      <td>{{ e.date.isoformat() }}</td>
+      <td>{{ e.start_time.strftime("%H:%M") }} - {{ e.end_time.strftime("%H:%M") }}</td>
+      <td>{{ e.location.name if e.location else "-" }}</td>
+      <td>{{ e.status }}</td>
+      <td>
+        {% if e.status == "요청" and e.id in slot_options_by_event %}
+        {% set options = slot_options_by_event[e.id] %}
+        <form method="post" action="{{ url_for('rounds.reassign_event', round_id=round.id, event_id=e.id) }}"
+              class="reassign-form" data-event-id="{{ e.id }}"
+              style="display:flex; gap:4px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <select name="slot" {% if not options %}disabled{% endif %}>
+            {% for d, s, en in options %}
+            <option value="{{ d.isoformat() }}|{{ s.strftime('%H:%M') }}|{{ en.strftime('%H:%M') }}"
+              {% if d == e.date and s == e.start_time %}selected{% endif %}>
+              {{ d.isoformat() }} {{ s.strftime('%H:%M') }}~{{ en.strftime('%H:%M') }}
+            </option>
+            {% else %}
+            <option value="">다른 가능 시간 없음</option>
+            {% endfor %}
+          </select>
+          <button type="submit" {% if not options %}disabled{% endif %}>변경</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">아직 생성된 배정이 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

@@ -7,7 +7,7 @@ from app.models import Location
 
 locations_bp = Blueprint("locations", __name__)
 
-COLOR_PALETTE = ["#2c6fbb", "#27ae60", "#e67e22", "#8e44ad", "#c0392b", "#16a085", "#d35400", "#2980b9"]
+COLOR_PALETTE = ["#7c98c2", "#6fae8b", "#dda85e", "#a48cc4", "#d98080", "#5fada6", "#c99b6a", "#8891c7"]
 
 
 @locations_bp.route("/locations", methods=["GET"])

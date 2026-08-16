@@ -3,6 +3,9 @@ document.addEventListener("DOMContentLoaded", function () {
     .querySelector('meta[name="csrf-token"]')
     .getAttribute("content");
 
+  const scheduleStartHour = Number(document.getElementById("calendar").dataset.startHour || 6);
+  const scheduleEndHour = Number(document.getElementById("calendar").dataset.endHour || 22);
+
   const modal = document.getElementById("event-modal");
   const form = document.getElementById("event-form");
   const modalTitle = document.getElementById("modal-title");
@@ -56,7 +59,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   const cubeContainer = document.getElementById("event-time-cubes");
-  for (let h = 6; h <= 21; h++) {
+  for (let h = scheduleStartHour; h < scheduleEndHour; h++) {
     const time = String(h).padStart(2, "0") + ":00";
     const cube = document.createElement("button");
     cube.type = "button";
@@ -102,6 +105,8 @@ document.addEventListener("DOMContentLoaded", function () {
       center: "title",
       right: "dayGridMonth,timeGridWeek",
     },
+    slotMinTime: String(scheduleStartHour).padStart(2, "0") + ":00:00",
+    slotMaxTime: String(scheduleEndHour).padStart(2, "0") + ":00:00",
     events: "/api/events",
     eventClassNames: function (arg) {
       const classes = arg.event.extendedProps.status === "요청" ? ["ev-pending"] : [];
@@ -183,6 +188,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (res.ok) {
         calendar.refetchEvents();
         closeModal();
+      } else {
+        res.json().then((data) => alert(data.error || "저장하지 못했어요. 다시 시도해주세요."));
       }
     });
   });

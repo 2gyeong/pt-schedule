@@ -1,13 +1,15 @@
 from datetime import datetime, time
 
-from flask import Blueprint, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app import db
 from app.context import current_trainer
-from app.models import RecurringTrainerAvailability, TrainerBlackout
+from app.models import Location, RecurringTrainerAvailability, TrainerBlackout, WeekdayStartLocation
 
 blackouts_bp = Blueprint("blackouts", __name__)
+
+WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
 
 
 @blackouts_bp.route("/blackouts", methods=["GET"])
@@ -17,7 +19,59 @@ def list_blackouts():
     blackouts = TrainerBlackout.query.filter_by(trainer_id=trainer.id).order_by(TrainerBlackout.date).all()
     recurring = RecurringTrainerAvailability.query.filter_by(trainer_id=trainer.id).all()
     recurring_blocks = [{"weekday": r.weekday, "hour": r.start_time.hour} for r in recurring]
-    return render_template("blackouts.html", blackouts=blackouts, recurring_blocks=recurring_blocks)
+    locations = Location.query.filter_by(trainer_id=trainer.id).order_by(Location.name).all()
+    start_location_by_weekday = {
+        s.weekday: s.location_id
+        for s in WeekdayStartLocation.query.filter_by(trainer_id=trainer.id).all()
+    }
+    return render_template(
+        "blackouts.html",
+        blackouts=blackouts,
+        recurring_blocks=recurring_blocks,
+        locations=locations,
+        weekday_names=list(enumerate(WEEKDAY_NAMES)),
+        start_location_by_weekday=start_location_by_weekday,
+        schedule_start_hour=trainer.schedule_start_hour,
+        schedule_end_hour=trainer.schedule_end_hour,
+    )
+
+
+@blackouts_bp.route("/blackouts/schedule-range", methods=["POST"])
+@login_required
+def save_schedule_range():
+    trainer = current_trainer()
+    try:
+        start_hour = int(request.form.get("start_hour", ""))
+        end_hour = int(request.form.get("end_hour", ""))
+    except ValueError:
+        flash("시간 범위를 올바르게 선택해주세요.")
+        return redirect(url_for("blackouts.list_blackouts"))
+
+    if not (0 <= start_hour < end_hour <= 24):
+        flash("종료 시간이 시작 시간보다 늦어야 해요.")
+        return redirect(url_for("blackouts.list_blackouts"))
+
+    trainer.schedule_start_hour = start_hour
+    trainer.schedule_end_hour = end_hour
+    db.session.commit()
+    flash("표시 시간 범위를 저장했습니다.")
+    return redirect(url_for("blackouts.list_blackouts"))
+
+
+@blackouts_bp.route("/blackouts/start-locations", methods=["POST"])
+@login_required
+def save_start_locations():
+    trainer = current_trainer()
+    WeekdayStartLocation.query.filter_by(trainer_id=trainer.id).delete()
+    for weekday in range(7):
+        location_id = request.form.get(f"start_location_{weekday}", "").strip()
+        if location_id:
+            db.session.add(
+                WeekdayStartLocation(trainer_id=trainer.id, weekday=weekday, location_id=int(location_id))
+            )
+    db.session.commit()
+    flash("요일별 시작 지점을 저장했습니다.")
+    return redirect(url_for("blackouts.list_blackouts"))
 
 
 @blackouts_bp.route("/blackouts/recurring", methods=["POST"])

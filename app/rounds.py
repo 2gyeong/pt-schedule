@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app import db
@@ -50,12 +50,12 @@ def create_round():
         SchedulingRound.status.in_(["대기", "계산됨"])
     ).first()
     if active:
-        flash("이미 진행 중인 라운드가 있습니다. 먼저 승인하거나 마무리해주세요.")
+        flash("이미 진행 중인 회차가 있습니다. 먼저 승인하거나 마무리해주세요.")
         return redirect(url_for("rounds.list_rounds"))
 
     start_str = request.form.get("start_date", "").strip()
     end_str = request.form.get("end_date", "").strip()
-    session_minutes = request.form.get("session_minutes", "60").strip()
+    session_minutes = request.form.get("session_minutes", "50").strip()
     if start_str and end_str:
         start_date = datetime.fromisoformat(start_str).date()
         end_date = datetime.fromisoformat(end_str).date()
@@ -66,11 +66,26 @@ def create_round():
             trainer_id=trainer.id,
             start_date=start_date,
             end_date=end_date,
-            session_minutes=int(session_minutes) if session_minutes else 60,
+            session_minutes=int(session_minutes) if session_minutes else 50,
         )
         db.session.add(round_obj)
         db.session.commit()
     return redirect(url_for("rounds.list_rounds"))
+
+
+def _events_context(round_obj):
+    events = (
+        ScheduleEvent.query.filter_by(round_id=round_obj.id)
+        .order_by(ScheduleEvent.date, ScheduleEvent.start_time)
+        .all()
+    )
+    slot_options_by_event = {}
+    if round_obj.status != "확정":
+        for e in events:
+            if e.status != "요청":
+                continue
+            slot_options_by_event[e.id] = valid_slots_for_member(round_obj, e.member_id, exclude_event_id=e.id)
+    return events, slot_options_by_event
 
 
 @rounds_bp.route("/rounds/<int:round_id>")
@@ -85,17 +100,7 @@ def round_detail(round_id):
     quota_by_member = {
         q.member_id: q.count for q in RoundQuota.query.filter_by(round_id=round_id).all()
     }
-    events = (
-        ScheduleEvent.query.filter_by(round_id=round_id)
-        .order_by(ScheduleEvent.date, ScheduleEvent.start_time)
-        .all()
-    )
-    slot_options_by_event = {}
-    if round_obj.status != "확정":
-        for e in events:
-            if e.status != "요청":
-                continue
-            slot_options_by_event[e.id] = valid_slots_for_member(round_obj, e.member_id, exclude_event_id=e.id)
+    events, slot_options_by_event = _events_context(round_obj)
 
     return render_template(
         "round_detail.html",
@@ -108,19 +113,48 @@ def round_detail(round_id):
     )
 
 
+@rounds_bp.route("/rounds/<int:round_id>/members/<int:member_id>/valid-slots", methods=["GET"])
+@login_required
+def member_valid_slots(round_id, member_id):
+    trainer = current_trainer()
+    round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
+    exclude_event_id = request.args.get("exclude_event_id", type=int)
+    slots = valid_slots_for_member(round_obj, member_id, exclude_event_id=exclude_event_id)
+    return jsonify(
+        [
+            {
+                "start": f"{d.isoformat()}T{s.strftime('%H:%M:%S')}",
+                "end": f"{d.isoformat()}T{e.strftime('%H:%M:%S')}",
+                "display": "background",
+                "color": "#a9d9be",
+            }
+            for d, s, e in slots
+        ]
+    )
+
+
 @rounds_bp.route("/rounds/<int:round_id>/events/<int:event_id>/reassign", methods=["POST"])
 @login_required
 def reassign_event(round_id, event_id):
     trainer = current_trainer()
     round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
     event = ScheduleEvent.query.filter_by(id=event_id, round_id=round_id).first_or_404()
+    is_ajax = request.headers.get("X-Requested-With") == "fetch"
 
     slot_key = request.form.get("slot", "")
     valid = valid_slots_for_member(round_obj, event.member_id, exclude_event_id=event.id)
     valid_keys = {f"{d.isoformat()}|{s.strftime('%H:%M')}|{e.strftime('%H:%M')}" for d, s, e in valid}
 
     if slot_key not in valid_keys:
-        flash("선택한 시간은 이 회원의 가능 시간이 아니에요.")
+        message = "선택한 시간은 이 회원의 가능 시간이 아니에요."
+        if is_ajax:
+            events, slot_options_by_event = _events_context(round_obj)
+            table_html = render_template(
+                "_round_events_table.html", round=round_obj, events=events,
+                slot_options_by_event=slot_options_by_event,
+            )
+            return jsonify({"ok": False, "message": message, "table_html": table_html})
+        flash(message)
         return redirect(url_for("rounds.round_detail", round_id=round_id))
 
     date_str, start_str, end_str = slot_key.split("|")
@@ -128,6 +162,24 @@ def reassign_event(round_id, event_id):
     event.start_time = datetime.strptime(start_str, "%H:%M").time()
     event.end_time = datetime.strptime(end_str, "%H:%M").time()
     db.session.commit()
+
+    if is_ajax:
+        events, slot_options_by_event = _events_context(round_obj)
+        table_html = render_template(
+            "_round_events_table.html", round=round_obj, events=events,
+            slot_options_by_event=slot_options_by_event,
+        )
+        return jsonify({
+            "ok": True,
+            "message": "시간을 변경했습니다.",
+            "table_html": table_html,
+            "event": {
+                "id": event.id,
+                "start": f"{event.date.isoformat()}T{event.start_time.strftime('%H:%M:%S')}",
+                "end": f"{event.date.isoformat()}T{event.end_time.strftime('%H:%M:%S')}",
+            },
+        })
+
     flash("시간을 변경했습니다.")
     return redirect(url_for("rounds.round_detail", round_id=round_id))
 
@@ -183,7 +235,7 @@ def delete_round(round_id):
     ScheduleEvent.query.filter_by(round_id=round_id, status="요청").delete()
     db.session.delete(round_obj)
     db.session.commit()
-    flash("라운드를 삭제했습니다.")
+    flash("회차를 삭제했습니다.")
     return redirect(url_for("rounds.list_rounds"))
 
 

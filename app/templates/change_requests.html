@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}변경 요청{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.15/index.global.min.js"></script>
+{% endblock %}
+{% block content %}
+<h1>예약 변경 요청</h1>
+
+{% if not pending %}
+<p class="hint">대기 중인 변경 요청이 없어요.</p>
+{% else %}
+<div class="callout">
+  <ul>
+    <li>아래 달력에서 현재 예약 상황을 확인한 뒤, "수락"을 누르면 요청한 시간으로 옮겨져요.</li>
+    <li>다른 예약과 겹치거나 이동 시간이 부족하면 자동으로 막히고 이유를 알려드려요.</li>
+  </ul>
+</div>
+<div id="trainer-calendar" style="margin-bottom:22px;"></div>
+
+<table class="member-table">
+  <thead>
+    <tr><th>회원</th><th>현재 예약</th><th>요청한 시간</th><th>메모</th><th>처리</th></tr>
+  </thead>
+  <tbody>
+    {% for req in pending %}
+    <tr>
+      <td>{{ req.member.name }}</td>
+      <td>{{ req.event.date.isoformat() }} {{ req.event.start_time.strftime("%H:%M") }}~{{ req.event.end_time.strftime("%H:%M") }}
+        {% if req.event.location %} @ {{ req.event.location.name }}{% endif %}</td>
+      <td>
+        <button type="button" class="copy-link-btn goto-calendar-btn" data-date="{{ req.requested_date.isoformat() }}">
+          {{ req.requested_date.isoformat() }} {{ req.requested_start_time.strftime("%H:%M") }}~{{ req.requested_end_time.strftime("%H:%M") }} 달력에서 보기
+        </button>
+      </td>
+      <td>{{ req.memo or "-" }}</td>
+      <td>
+        <div style="display:flex; gap:8px;">
+          <form method="post" action="{{ url_for('change_requests.accept_change_request', request_id=req.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">수락</button>
+          </form>
+          <form method="post" action="{{ url_for('change_requests.reject_change_request', request_id=req.id) }}"
+                onsubmit="return confirm('이 요청을 거절할까요?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="danger">거절</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if handled %}
+<h2>최근 처리된 요청</h2>
+<table class="member-table">
+  <thead>
+    <tr><th>회원</th><th>요청한 시간</th><th>상태</th></tr>
+  </thead>
+  <tbody>
+    {% for req in handled %}
+    <tr>
+      <td>{{ req.member.name }}</td>
+      <td>{{ req.requested_date.isoformat() }} {{ req.requested_start_time.strftime("%H:%M") }}~{{ req.requested_end_time.strftime("%H:%M") }}</td>
+      <td>
+        {% if req.status == "수락됨" %}<span class="ok">{{ req.status }}</span>
+        {% else %}<span class="danger">{{ req.status }}</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if pending %}
+<script>
+  const trainerCalendar = new FullCalendar.Calendar(document.getElementById("trainer-calendar"), {
+    initialView: "timeGridWeek",
+    initialDate: "{{ initial_date.isoformat() }}",
+    headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek" },
+    slotMinTime: "{{ "%02d" % current_trainer().schedule_start_hour }}:00:00",
+    slotMaxTime: "{{ "%02d" % current_trainer().schedule_end_hour }}:00:00",
+    events: "/api/events",
+  });
+  trainerCalendar.render();
+
+  document.querySelectorAll(".goto-calendar-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      trainerCalendar.changeView("timeGridWeek");
+      trainerCalendar.gotoDate(btn.dataset.date);
+      document.getElementById("trainer-calendar").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

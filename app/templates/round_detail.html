@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}라운드 상세{% endblock %}
+{% block title %}회차 상세{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/index.global.min.js"></script>
@@ -9,7 +9,25 @@
 {% endblock %}
 {% block flash %}{% endblock %}
 {% block content %}
-<h1>라운드 상세 ({{ round.status }})</h1>
+<div class="status-card">
+  <div class="status-card-top">
+    <span class="status-card-title">
+      {{ round.start_date.month }}월 {{ ((round.start_date.day - 1) // 7) + 1 }}주차
+      ({{ round.start_date.strftime('%y.%m.%d') }}~{{ round.end_date.strftime('%y.%m.%d') }}) 예약 페이지입니다
+    </span>
+    <span class="status-badge status-{{ round.status }}">{{ round.status }}</span>
+  </div>
+  <p class="status-card-desc">
+    {% if round.status == "대기" %}
+    아직 스케줄이 계산되지 않았어요. 아래에서 회원별 이번 회차 횟수를 입력하고 스케줄을 생성해주세요.
+    {% elif round.status == "계산됨" %}
+    스케줄이 계산됐지만 아직 회원에게 확정되지 않았어요. 아래 제안된 일정을 검토한 뒤 승인하면 회원에게 확정돼요.
+    {% else %}
+    회원에게 확정된 일정이에요. 더 이상 배정 결과를 수정할 수 없어요.
+    {% endif %}
+    (PT 시간: {{ round.session_minutes }}분)
+  </p>
+</div>
 
 {% if round.status != "확정" %}
 <form method="post" action="{{ url_for('rounds.update_dates', round_id=round.id) }}" class="member-form" id="dates-form">
@@ -18,21 +36,22 @@
   <label>종료일 <input type="date" name="end_date" id="dates-end" value="{{ round.end_date.isoformat() }}" required></label>
   <button type="submit">기간 수정</button>
 </form>
-{% else %}
-<p>기간: {{ round.start_date.isoformat() }} ~ {{ round.end_date.isoformat() }} / 세션 길이: {{ round.session_minutes }}분</p>
 {% endif %}
 
-<h2>회원별 이번 라운드 횟수</h2>
-<p class="hint">
-  회원이 이번 라운드에 대해 직접 "제출"을 눌러야 아래 "제출완료"로 표시되고 계산 대상에 포함됩니다.
-  회원마다 이번 기간에 몇 번 PT를 할지 입력하세요. 잔여 횟수보다 많이 넣어도 잔여 횟수만큼만 배정됩니다.
-</p>
+<h2>회원별 이번 회차 횟수</h2>
+<div class="callout">
+  <ul>
+    <li>회원이 직접 "제출"을 눌러야 아래 표에 "제출완료"로 표시되고, 계산 대상에 포함돼요.</li>
+    <li>회원마다 이번 기간에 몇 번 PT할지 입력하세요.</li>
+    <li>잔여 횟수보다 많이 넣어도 잔여 횟수만큼만 배정돼요.</li>
+  </ul>
+</div>
 
 <form method="post" action="{{ url_for('rounds.generate', round_id=round.id) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <table class="member-table">
     <thead>
-      <tr><th>회원</th><th>이번 라운드 제출</th><th>비고</th><th>잔여 횟수</th><th>이번 라운드 횟수</th></tr>
+      <tr><th>회원</th><th>이번 회차 제출</th><th>비고</th><th>잔여 횟수</th><th>이번 회차 횟수</th></tr>
     </thead>
     <tbody>
       {% for member in members %}
@@ -47,7 +66,7 @@
         <td>
           <input type="number" name="quota_{{ member.id }}" min="0"
                  max="{{ member.remaining_sessions }}"
-                 value="{{ quota_by_member.get(member.id, 0) }}" style="width:70px">
+                 value="{{ quota_by_member.get(member.id, [1, member.remaining_sessions] | min) }}" style="width:70px">
         </td>
       </tr>
       {% else %}
@@ -56,18 +75,11 @@
     </tbody>
   </table>
   <div class="modal-actions">
-    <button type="submit">이번 라운드 횟수 저장하고 스케줄 생성</button>
+    <button type="submit">이번 회차 횟수 저장하고 스케줄 생성</button>
   </div>
 </form>
 
-{% if round.status == "계산됨" %}
-<form method="post" action="{{ url_for('rounds.approve', round_id=round.id) }}"
-      onsubmit="return confirm('제안된 스케줄을 모두 확정할까요? 확정 시 회원별 잔여 횟수가 차감됩니다.');">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit">라운드 승인 (일괄 확정)</button>
-</form>
-{% endif %}
-
+<div id="reassign-flash">
 {% with messages = get_flashed_messages() %}
   {% if messages %}
     <ul class="flash">
@@ -77,53 +89,32 @@
     </ul>
   {% endif %}
 {% endwith %}
+</div>
 
 {% if round.status != "확정" %}
 <h2>주간 보기 (드래그로 시간 조정)</h2>
-<p class="hint">블록을 끌기 시작하면 그 회원이 가능하다고 설정한 시간이 연두색으로 표시돼요. 그 안에서만 옮길 수 있고, 벗어나면 원래 자리로 되돌아갑니다.</p>
+<div class="callout">
+  <ul>
+    <li>블록을 끌기 시작하면 그 회원의 가능 시간이 연두색으로 표시돼요.</li>
+    <li>그 안에서만 옮길 수 있고, 벗어나면 원래 자리로 되돌아가요.</li>
+  </ul>
+</div>
 <div id="round-week-calendar"></div>
 {% endif %}
 
-<h2>배정 결과</h2>
-<p class="hint">"요청" 상태인 건은 회원이 가능하다고 설정한 시간 중에서만 다른 시간으로 바꿀 수 있어요.</p>
-<table class="member-table">
-  <thead>
-    <tr><th>회원</th><th>날짜</th><th>시간</th><th>지점</th><th>상태</th><th>수정</th></tr>
-  </thead>
-  <tbody>
-    {% for e in events %}
-    <tr>
-      <td>{{ e.member.name }}</td>
-      <td>{{ e.date.isoformat() }}</td>
-      <td>{{ e.start_time.strftime("%H:%M") }} - {{ e.end_time.strftime("%H:%M") }}</td>
-      <td>{{ e.location.name if e.location else "-" }}</td>
-      <td>{{ e.status }}</td>
-      <td>
-        {% if e.status == "요청" and e.id in slot_options_by_event %}
-        {% set options = slot_options_by_event[e.id] %}
-        <form method="post" action="{{ url_for('rounds.reassign_event', round_id=round.id, event_id=e.id) }}"
-              style="display:flex; gap:4px;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <select name="slot" {% if not options %}disabled{% endif %}>
-            {% for d, s, en in options %}
-            <option value="{{ d.isoformat() }}|{{ s.strftime('%H:%M') }}|{{ en.strftime('%H:%M') }}"
-              {% if d == e.date and s == e.start_time %}selected{% endif %}>
-              {{ d.isoformat() }} {{ s.strftime('%H:%M') }}~{{ en.strftime('%H:%M') }}
-            </option>
-            {% else %}
-            <option value="">다른 가능 시간 없음</option>
-            {% endfor %}
-          </select>
-          <button type="submit" {% if not options %}disabled{% endif %}>변경</button>
-        </form>
-        {% endif %}
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="6">아직 생성된 배정이 없습니다.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div id="events-section">
+  {% include "_round_events_table.html" %}
+</div>
+
+{% if round.status == "계산됨" %}
+<div class="round-approve-row">
+  <form method="post" action="{{ url_for('rounds.approve', round_id=round.id) }}"
+        onsubmit="return confirm('제안된 스케줄을 모두 확정할까요? 확정 시 회원별 잔여 횟수가 차감됩니다.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">회차 승인 (일괄 확정)</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 {% if round.status != "확정" %}
@@ -143,6 +134,39 @@
     }
   });
 
+  const eventsSection = document.getElementById("events-section");
+  const reassignFlash = document.getElementById("reassign-flash");
+
+  function showReassignFlash(message) {
+    if (!message) { reassignFlash.innerHTML = ""; return; }
+    reassignFlash.innerHTML = `<ul class="flash"><li>${message}</li></ul>`;
+  }
+
+  function submitReassign(url, formData) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "X-Requested-With": "fetch" },
+      body: formData,
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.table_html) eventsSection.innerHTML = data.table_html;
+        showReassignFlash(data.message);
+        if (data.ok && data.event) {
+          const calEvent = weekCalendar.getEventById(String(data.event.id));
+          if (calEvent) calEvent.setDates(data.event.start, data.event.end);
+        }
+        return data;
+      });
+  }
+
+  eventsSection.addEventListener("submit", function (e) {
+    const form = e.target.closest(".reassign-form");
+    if (!form) return;
+    e.preventDefault();
+    submitReassign(form.action, new FormData(form));
+  });
+
   const weekCalendarEl = document.getElementById("round-week-calendar");
   const weekEvents = [
     {% for e in events %}
@@ -153,7 +177,8 @@
       end: "{{ e.date.isoformat() }}T{{ e.end_time.strftime('%H:%M:%S') }}",
       backgroundColor: "{{ e.location.color if e.location else '#888' }}",
       borderColor: "{{ e.location.color if e.location else '#888' }}",
-      editable: {{ "true" if e.status == "요청" else "false" }},
+      startEditable: {{ "true" if e.status == "요청" else "false" }},
+      durationEditable: false,
       extendedProps: { memberId: "{{ e.member_id }}" },
     },
     {% endfor %}
@@ -164,14 +189,25 @@
     initialView: "timeGridWeek",
     initialDate: "{{ round.start_date.isoformat() }}",
     headerToolbar: { left: "prev,next today", center: "title", right: "" },
-    snapDuration: "01:00:00",
+    slotDuration: "00:10:00",
+    slotLabelInterval: "01:00:00",
+    snapDuration: "00:10:00",
+    slotMinTime: "{{ "%02d" % current_trainer().schedule_start_hour }}:00:00",
+    slotMaxTime: "{{ "%02d" % current_trainer().schedule_end_hour }}:00:00",
+    eventDurationEditable: false,
     events: weekEvents,
     eventDragStart: function (info) {
       const memberId = info.event.extendedProps.memberId;
-      weekCalendar.addEventSource({
-        id: DRAG_AVAILABILITY_SOURCE_ID,
-        url: `/api/members/${memberId}/available`,
-      });
+      showReassignFlash("");
+      fetch(`/rounds/{{ round.id }}/members/${memberId}/valid-slots?exclude_event_id=${info.event.id}`)
+        .then((r) => r.json())
+        .then((slots) => {
+          if (slots.length === 0) {
+            showReassignFlash("이 회원은 이번 회차 기간에 옮길 수 있는 다른 시간이 없어요. (이미 다른 예약이 그 회원의 가능한 요일을 모두 채웠어요)");
+            return;
+          }
+          weekCalendar.addEventSource({ id: DRAG_AVAILABILITY_SOURCE_ID, events: slots });
+        });
     },
     eventDragStop: function () {
       const src = weekCalendar.getEventSourceById(DRAG_AVAILABILITY_SOURCE_ID);
@@ -188,15 +224,13 @@
       }
       const slot = `${toDate(start)}|${toTime(start)}|${toTime(end)}`;
 
-      const form = document.createElement("form");
-      form.method = "post";
-      form.action = `/rounds/{{ round.id }}/events/${info.event.id}/reassign`;
-      form.innerHTML = `
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="slot" value="${slot}">
-      `;
-      document.body.appendChild(form);
-      form.submit();
+      const formData = new FormData();
+      formData.set("csrf_token", "{{ csrf_token() }}");
+      formData.set("slot", slot);
+
+      submitReassign(`/rounds/{{ round.id }}/events/${info.event.id}/reassign`, formData).then((data) => {
+        if (!data.ok) info.revert();
+      });
     },
   });
   weekCalendar.render();

@@ -27,6 +27,7 @@ def create_app():
     from app.blackouts import blackouts_bp
     from app.rounds import rounds_bp
     from app.admin import admin_bp
+    from app.change_requests import change_requests_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(members_bp)
@@ -36,6 +37,7 @@ def create_app():
     app.register_blueprint(blackouts_bp)
     app.register_blueprint(rounds_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(change_requests_bp)
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -44,11 +46,14 @@ def create_app():
         except (TypeError, ValueError):
             return None
 
-    from app.context import current_trainer
+    from app.context import current_trainer, pending_change_requests_count
 
     @app.context_processor
     def inject_current_trainer():
-        return {"current_trainer": current_trainer}
+        return {
+            "current_trainer": current_trainer,
+            "pending_change_requests_count": pending_change_requests_count,
+        }
 
     with app.app_context():
         db.create_all()

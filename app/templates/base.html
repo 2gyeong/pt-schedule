@@ -20,7 +20,11 @@
     <a href="{{ url_for('members.list_members') }}">회원 관리</a>
     <a href="{{ url_for('locations.list_locations') }}">지점 관리</a>
     <a href="{{ url_for('blackouts.list_blackouts') }}">가능 시간</a>
-    <a href="{{ url_for('rounds.list_rounds') }}">스케줄링 라운드</a>
+    <a href="{{ url_for('rounds.list_rounds') }}">스케줄링 회차</a>
+    <a href="{{ url_for('change_requests.list_change_requests') }}" class="nav-bell" id="change-requests-link">
+      🔔
+      <span id="change-requests-badge" class="badge {% if not pending_change_requests_count() %}hidden{% endif %}">{{ pending_change_requests_count() }}</span>
+    </a>
     {% endif %}
     <a href="{{ url_for('auth.logout') }}" class="logout">로그아웃</a>
   </nav>
@@ -35,6 +39,27 @@
   {% endif %}
   {% endif %}
   {% endblock %}
+
+  {% if current_user.is_authenticated %}
+  <script>
+    (function () {
+      const badge = document.getElementById("change-requests-badge");
+      if (!badge) return;
+      function refreshBadge() {
+        fetch("/api/change-requests/count")
+          .then((r) => r.json())
+          .then((data) => {
+            badge.textContent = data.count;
+            badge.classList.toggle("hidden", !data.count);
+          });
+      }
+      setInterval(refreshBadge, 30000);
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") refreshBadge();
+      });
+    })();
+  </script>
+  {% endif %}
 
   <main class="container">
     {% block flash %}

@@ -1,7 +1,9 @@
 function initBlockGrid(container, options) {
   const days = ["월", "화", "수", "목", "금", "토", "일"];
+  const startHour = options.startHour !== undefined ? options.startHour : 6;
+  const endHour = options.endHour !== undefined ? options.endHour : 22;
   const hours = [];
-  for (let h = 6; h <= 21; h++) hours.push(h);
+  for (let h = startHour; h < endHour; h++) hours.push(h);
 
   const existingSet = new Set((options.existing || []).map((b) => b.weekday + "-" + b.hour));
   const constraintSet = options.constraint

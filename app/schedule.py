@@ -6,7 +6,7 @@ from flask_login import login_required
 from app import db
 from app.context import current_trainer
 from app.models import Location, Member, ScheduleEvent
-from app.scheduling import member_available_background
+from app.scheduling import member_available_background, slot_conflicts
 
 schedule_bp = Blueprint("schedule", __name__)
 
@@ -78,18 +78,29 @@ def create_event():
     data = request.get_json()
     member = Member.query.filter_by(id=data["member_id"], trainer_id=trainer.id).first_or_404()
     location_id = data.get("location_id") or member.location_id
+    event_date = datetime.fromisoformat(data["date"]).date()
+    start_time = datetime.strptime(data["start_time"], "%H:%M").time()
+    end_time = datetime.strptime(data["end_time"], "%H:%M").time()
+    if end_time <= start_time:
+        return jsonify({"error": "종료 시간이 시작 시간보다 늦어야 해요."}), 400
+
+    location = Location.query.filter_by(id=location_id, trainer_id=trainer.id).first() if location_id else None
+    if slot_conflicts(trainer.id, event_date, start_time, end_time, location):
+        return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
+
     event = ScheduleEvent(
         trainer_id=trainer.id,
         member_id=member.id,
         location_id=location_id,
-        date=datetime.fromisoformat(data["date"]).date(),
-        start_time=datetime.strptime(data["start_time"], "%H:%M").time(),
-        end_time=datetime.strptime(data["end_time"], "%H:%M").time(),
+        date=event_date,
+        start_time=start_time,
+        end_time=end_time,
         memo=data.get("memo") or None,
         source="trainer",
         status="요청",  # _apply_status로 확정 전환시켜 잔여 횟수 차감
     )
     db.session.add(event)
+    db.session.flush()
     _apply_status(event, "확정")
     db.session.commit()
     return jsonify(event_to_dict(event)), 201
@@ -101,18 +112,28 @@ def update_event(event_id):
     trainer = current_trainer()
     event = ScheduleEvent.query.filter_by(id=event_id, trainer_id=trainer.id).first_or_404()
     data = request.get_json()
+
+    new_date = datetime.fromisoformat(data["date"]).date() if data.get("date") else event.date
+    new_start = datetime.strptime(data["start_time"], "%H:%M").time() if data.get("start_time") else event.start_time
+    new_end = datetime.strptime(data["end_time"], "%H:%M").time() if data.get("end_time") else event.end_time
+    if new_end <= new_start:
+        return jsonify({"error": "종료 시간이 시작 시간보다 늦어야 해요."}), 400
+
+    new_location_id = data.get("location_id") or event.location_id
+    new_location = (
+        Location.query.filter_by(id=new_location_id, trainer_id=trainer.id).first() if new_location_id else None
+    )
+    if slot_conflicts(trainer.id, new_date, new_start, new_end, new_location, exclude_event_id=event.id):
+        return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
+
     if data.get("member_id"):
         member = Member.query.filter_by(id=data["member_id"], trainer_id=trainer.id).first()
         if member:
             event.member_id = member.id
-    if data.get("location_id"):
-        event.location_id = data["location_id"]
-    if data.get("date"):
-        event.date = datetime.fromisoformat(data["date"]).date()
-    if data.get("start_time"):
-        event.start_time = datetime.strptime(data["start_time"], "%H:%M").time()
-    if data.get("end_time"):
-        event.end_time = datetime.strptime(data["end_time"], "%H:%M").time()
+    event.location_id = new_location_id
+    event.date = new_date
+    event.start_time = new_start
+    event.end_time = new_end
     event.memo = data.get("memo", event.memo)
     if data.get("status"):
         _apply_status(event, data["status"])
@@ -148,7 +169,7 @@ def member_available(member_id):
                 "start": f"{d.isoformat()}T{s.isoformat()}",
                 "end": f"{d.isoformat()}T{e.isoformat()}",
                 "display": "background",
-                "color": "#8ee6a0",
+                "color": "#a9d9be",
             }
             for d, s, e in blocks
         ]

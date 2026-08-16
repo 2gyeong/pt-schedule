@@ -40,13 +40,14 @@
         </form>
       </td>
       <td>
-        {{ member.remaining_sessions }}
-        <form method="post" action="{{ url_for('members.adjust_sessions', member_id=member.id) }}"
-              style="display:inline-flex; gap:4px; margin-left:6px">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="number" name="delta" value="1" style="width:60px">
-          <button type="submit" class="copy-link-btn">적용</button>
-        </form>
+        <div class="quota-adjust">
+          <span class="quota-count">{{ member.remaining_sessions }}</span>
+          <form method="post" action="{{ url_for('members.adjust_sessions', member_id=member.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="number" name="delta" value="1">
+            <button type="submit" class="copy-link-btn">적용</button>
+          </form>
+        </div>
       </td>
       <td>{{ member.memo or "-" }}</td>
       <td>{{ member.note or "-" }}</td>

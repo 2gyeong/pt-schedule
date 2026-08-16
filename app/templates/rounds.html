@@ -1,12 +1,14 @@
 {% extends "base.html" %}
-{% block title %}스케줄링 라운드{% endblock %}
+{% block title %}스케줄링 회차{% endblock %}
 {% block content %}
-<h1>스케줄링 라운드</h1>
-<p class="hint">
-  지정한 기간에 대해, 선생님/회원이 각자 저장해둔 고정 가능 시간을 기준으로 스케줄을 자동 배정합니다.
-  <strong>회원이 설정한 요일(예: 매주 월요일)이 이 기간 안에 실제로 포함되어야</strong> 배정될 수 있어요 —
-  기간이 하루뿐이면 그 요일에 설정해둔 회원만 배정됩니다. 시작일/종료일은 기본으로 다음 주 월요일~일요일로 채워져 있으니 필요하면 직접 바꿔주세요.
-</p>
+<h1>스케줄링 회차</h1>
+<div class="callout">
+  <ul>
+    <li>지정한 기간 동안 선생님/회원이 저장해둔 고정 가능 시간을 기준으로 스케줄을 자동 배정해요.</li>
+    <li><strong>회원이 설정한 요일(예: 매주 월요일)이 이 기간 안에 포함되어야</strong> 배정될 수 있어요. 기간이 하루뿐이면 그 요일에 설정해둔 회원만 배정돼요.</li>
+    <li>시작일/종료일은 기본으로 다음 주 월요일~일요일이 채워져 있어요. 필요하면 직접 바꿔주세요.</li>
+  </ul>
+</div>
 
 <form method="post" action="{{ url_for('rounds.create_round') }}" class="member-form" id="round-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -16,34 +18,34 @@
   <label>종료일
     <input type="date" name="end_date" id="round-end" required>
   </label>
-  <label>세션 길이(분)
-    <input type="number" name="session_minutes" value="60" min="10" step="5" required>
+  <label>PT 시간(분)
+    <input type="number" name="session_minutes" value="50" min="10" step="5" required>
   </label>
-  <button type="submit">새 라운드 시작</button>
+  <button type="submit">새 회차 시작</button>
 </form>
 <p id="range-weekday-hint" class="hint"></p>
 
 <table class="member-table">
   <thead>
-    <tr><th>기간</th><th>세션 길이</th><th>상태</th><th></th><th></th></tr>
+    <tr><th>기간</th><th>PT 시간</th><th>상태</th><th></th><th></th></tr>
   </thead>
   <tbody>
     {% for r in rounds %}
     <tr>
-      <td>{{ r.start_date.isoformat() }} ~ {{ r.end_date.isoformat() }}</td>
+      <td>{{ r.start_date.month }}월 {{ ((r.start_date.day - 1) // 7) + 1 }}주차 ({{ r.start_date.strftime('%y.%m.%d') }} ~ {{ r.end_date.strftime('%y.%m.%d') }})</td>
       <td>{{ r.session_minutes }}분</td>
-      <td>{{ r.status }}</td>
+      <td><span class="status-badge status-{{ r.status }}">{{ r.status }}</span></td>
       <td><a href="{{ url_for('rounds.round_detail', round_id=r.id) }}">상세보기</a></td>
       <td>
         <form method="post" action="{{ url_for('rounds.delete_round', round_id=r.id) }}"
-              onsubmit="return confirm('이 라운드를 삭제할까요? (아직 확정되지 않은 배정은 함께 삭제됩니다)');">
+              onsubmit="return confirm('이 회차를 삭제할까요? (아직 확정되지 않은 배정은 함께 삭제됩니다)');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="danger">삭제</button>
         </form>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5">생성된 라운드가 없습니다.</td></tr>
+    <tr><td colspan="5">생성된 회차가 없습니다.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -92,7 +94,7 @@
     if (!startField.value || !endField.value) return;
     if (endField.value < startField.value) {
       hintEl.textContent = "⚠️ 종료일이 시작일보다 빠릅니다.";
-      hintEl.style.color = "#c0392b";
+      hintEl.style.color = "#d98080";
       return;
     }
     const start = new Date(startField.value + "T00:00:00");
@@ -105,13 +107,13 @@
     const overlap = names.some((n) => activeWeekdayNames.includes(n));
     if (activeWeekdayNames.length === 0) {
       hintEl.textContent = `선택한 기간의 요일: ${names.join(", ")}. (아직 선생님/회원의 고정 가능 시간이 겹치는 요일이 없어요)`;
-      hintEl.style.color = "#e67e22";
+      hintEl.style.color = "#dda85e";
     } else if (overlap) {
       hintEl.textContent = `선택한 기간의 요일: ${names.join(", ")}. 가능 시간이 설정된 요일(${activeWeekdayNames.join(", ")})이 포함되어 있어요.`;
-      hintEl.style.color = "#27ae60";
+      hintEl.style.color = "#6fae8b";
     } else {
       hintEl.textContent = `⚠️ 선택한 기간의 요일(${names.join(", ")})에는 아무도 가능 시간을 설정하지 않았어요. 가능 시간이 설정된 요일은 ${activeWeekdayNames.join(", ")}입니다. 기간을 늘려주세요.`;
-      hintEl.style.color = "#c0392b";
+      hintEl.style.color = "#d98080";
     }
   }
   startField.addEventListener("change", updateHint);
