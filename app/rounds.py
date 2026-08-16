@@ -21,16 +21,17 @@ rounds_bp = Blueprint("rounds", __name__)
 WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
 
 
-@rounds_bp.route("/rounds", methods=["GET"])
-@login_required
-def list_rounds():
-    trainer = current_trainer()
+def _is_ajax():
+    return request.headers.get("X-Requested-With") == "fetch"
+
+
+def _rounds_context(trainer):
     rounds = (
         SchedulingRound.query.filter_by(trainer_id=trainer.id)
         .order_by(SchedulingRound.created_at.desc())
         .all()
     )
-    member_ids = [m.id for m in Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).all()]
+    member_ids = [m.id for m in Member.query.filter_by(trainer_id=trainer.id, is_deleted=False, is_prospect=False).all()]
     active_weekdays = sorted(
         {t.weekday for t in RecurringTrainerAvailability.query.filter_by(trainer_id=trainer.id).all()}
         & {
@@ -39,6 +40,21 @@ def list_rounds():
         }
     ) if member_ids else []
     active_weekday_names = [WEEKDAY_NAMES[w] for w in active_weekdays]
+    return rounds, active_weekday_names
+
+
+def _rounds_panel_html(trainer):
+    rounds, active_weekday_names = _rounds_context(trainer)
+    return render_template("_rounds_panel.html", rounds=rounds, active_weekday_names=active_weekday_names)
+
+
+@rounds_bp.route("/rounds", methods=["GET"])
+@login_required
+def list_rounds():
+    trainer = current_trainer()
+    if _is_ajax():
+        return jsonify({"ok": True, "html": _rounds_panel_html(trainer)})
+    rounds, active_weekday_names = _rounds_context(trainer)
     return render_template("rounds.html", rounds=rounds, active_weekday_names=active_weekday_names)
 
 
@@ -50,7 +66,10 @@ def create_round():
         SchedulingRound.status.in_(["대기", "계산됨"])
     ).first()
     if active:
-        flash("이미 진행 중인 회차가 있습니다. 먼저 승인하거나 마무리해주세요.")
+        message = "이미 진행 중인 회차가 있습니다. 먼저 승인하거나 마무리해주세요."
+        if _is_ajax():
+            return jsonify({"ok": False, "message": message, "html": _rounds_panel_html(trainer)})
+        flash(message)
         return redirect(url_for("rounds.list_rounds"))
 
     start_str = request.form.get("start_date", "").strip()
@@ -60,7 +79,10 @@ def create_round():
         start_date = datetime.fromisoformat(start_str).date()
         end_date = datetime.fromisoformat(end_str).date()
         if end_date < start_date:
-            flash("종료일이 시작일보다 빠를 수 없습니다.")
+            message = "종료일이 시작일보다 빠를 수 없습니다."
+            if _is_ajax():
+                return jsonify({"ok": False, "message": message, "html": _rounds_panel_html(trainer)})
+            flash(message)
             return redirect(url_for("rounds.list_rounds"))
         round_obj = SchedulingRound(
             trainer_id=trainer.id,
@@ -70,6 +92,8 @@ def create_round():
         )
         db.session.add(round_obj)
         db.session.commit()
+    if _is_ajax():
+        return jsonify({"ok": True, "html": _rounds_panel_html(trainer)})
     return redirect(url_for("rounds.list_rounds"))
 
 
@@ -93,7 +117,7 @@ def _events_context(round_obj):
 def round_detail(round_id):
     trainer = current_trainer()
     round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
-    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).order_by(Member.name).all()
+    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False, is_prospect=False).order_by(Member.name).all()
     submitted_member_ids = {
         s.member_id for s in RoundSubmission.query.filter_by(round_id=round_id).all()
     }
@@ -137,7 +161,7 @@ def mark_all_submitted(round_id):
     """제출하지 않은 모든 회원을 한 번에 제출완료로 처리한다."""
     trainer = current_trainer()
     round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
-    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).all()
+    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False, is_prospect=False).all()
     already = {s.member_id for s in RoundSubmission.query.filter_by(round_id=round_obj.id).all()}
 
     updated_ids = []
@@ -283,7 +307,7 @@ def generate(round_id):
     round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
 
     RoundQuota.query.filter_by(round_id=round_id).delete()
-    for member in Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).all():
+    for member in Member.query.filter_by(trainer_id=trainer.id, is_deleted=False, is_prospect=False).all():
         raw = request.form.get(f"quota_{member.id}", "0").strip()
         count = int(raw) if raw.isdigit() else 0
         if count > 0:
@@ -292,8 +316,9 @@ def generate(round_id):
 
     assigned, unassigned = generate_schedule(round_obj)
     if unassigned:
-        parts = ", ".join(f"{m.name}({missing}회 부족 - {reason})" for m, missing, reason in unassigned)
-        flash(f"{len(assigned)}건 배정 완료. 부족: {parts}")
+        flash(f"{len(assigned)}건 배정 완료. 아래 회원은 부족해요.")
+        for m, missing, reason in unassigned:
+            flash(f"· {m.name} — {missing}회 부족 ({reason})")
     else:
         flash(f"{len(assigned)}건 전체 배정 완료.")
     return redirect(url_for("rounds.round_detail", round_id=round_id))
@@ -307,6 +332,8 @@ def delete_round(round_id):
     ScheduleEvent.query.filter_by(round_id=round_id, status="요청").delete()
     db.session.delete(round_obj)
     db.session.commit()
+    if _is_ajax():
+        return jsonify({"ok": True, "html": _rounds_panel_html(trainer)})
     flash("회차를 삭제했습니다.")
     return redirect(url_for("rounds.list_rounds"))
 

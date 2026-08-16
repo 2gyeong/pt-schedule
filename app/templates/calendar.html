@@ -6,6 +6,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.15/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.15/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/ko.global.min.js"></script>
 {% endblock %}
 {% block content %}
 <h1>PT 일정</h1>
@@ -28,6 +29,7 @@
   </label>
 </div>
 <button type="button" id="new-event-btn">+ 새 일정 등록 (오늘)</button>
+<div id="calendar-week-label" class="hint" style="margin:16px 0 -8px;"></div>
 <div id="calendar" data-start-hour="{{ current_trainer().schedule_start_hour }}" data-end-hour="{{ current_trainer().schedule_end_hour }}"></div>
 <script id="kr-holidays" type="application/json">{{ holidays | tojson }}</script>
 
@@ -42,12 +44,15 @@
           <option value="상담">상담 (30분)</option>
         </select>
       </label>
-      <label>회원
+      <label id="event-member-field">회원
         <select id="event-member" required>
           {% for member in members %}
           <option value="{{ member.id }}">{{ member.name }}</option>
           {% endfor %}
         </select>
+      </label>
+      <label id="event-prospect-field" class="hidden">상담 받으실 분 이름
+        <input type="text" id="event-prospect-name" placeholder="이름을 입력해주세요">
       </label>
       <label>지점
         <select id="event-location">
@@ -83,7 +88,13 @@
     </form>
   </div>
 </div>
+
+<h2 style="margin-top:48px;">
+  <button type="button" id="rounds-toggle-btn" class="copy-link-btn">스케줄링 회차 ▾</button>
+</h2>
+<div id="rounds-panel-wrap" class="hidden"></div>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/rounds_panel.js') }}"></script>
 <script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
 {% endblock %}

@@ -13,13 +13,15 @@ schedule_bp = Blueprint("schedule", __name__)
 
 
 def _apply_status(event: ScheduleEvent, new_status: str):
-    """상태가 확정으로/확정에서 바뀔 때 회원의 잔여 횟수를 함께 조정한다."""
+    """상태가 확정으로/확정에서 바뀔 때 회원의 잔여 횟수를 함께 조정한다.
+    상담(신규 문의자)은 잔여 횟수 개념이 없으므로 건드리지 않는다."""
     if event.status == new_status:
         return
-    if new_status == "확정" and event.status != "확정":
-        event.member.remaining_sessions -= 1
-    elif event.status == "확정" and new_status != "확정":
-        event.member.remaining_sessions += 1
+    if event.event_type != "상담":
+        if new_status == "확정" and event.status != "확정":
+            event.member.remaining_sessions -= 1
+        elif event.status == "확정" and new_status != "확정":
+            event.member.remaining_sessions += 1
     event.status = new_status
 
 
@@ -38,6 +40,7 @@ def event_to_dict(event: ScheduleEvent) -> dict:
         "borderColor": event.location.color if event.location else "#888",
         "extendedProps": {
             "member_id": event.member_id,
+            "member_name": event.member.name,
             "location_id": event.location_id,
             "location_name": location_name,
             "round_id": event.round_id,
@@ -54,7 +57,11 @@ def event_to_dict(event: ScheduleEvent) -> dict:
 @login_required
 def calendar_view():
     trainer = current_trainer()
-    members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).order_by(Member.name).all()
+    members = (
+        Member.query.filter_by(trainer_id=trainer.id, is_deleted=False, is_prospect=False)
+        .order_by(Member.name)
+        .all()
+    )
     locations = Location.query.filter_by(trainer_id=trainer.id).order_by(Location.name).all()
     return render_template("calendar.html", members=members, locations=locations, holidays=KR_HOLIDAYS)
 
@@ -79,8 +86,25 @@ def list_events():
 def create_event():
     trainer = current_trainer()
     data = request.get_json()
-    member = Member.query.filter_by(id=data["member_id"], trainer_id=trainer.id).first_or_404()
-    location_id = data.get("location_id") or member.location_id
+    event_type = data.get("event_type") if data.get("event_type") in ("PT", "상담") else "PT"
+
+    if event_type == "상담":
+        prospect_name = (data.get("prospect_name") or "").strip()
+        if not prospect_name:
+            return jsonify({"error": "상담 받으실 분의 이름을 입력해주세요."}), 400
+        member = Member(
+            trainer_id=trainer.id,
+            name=prospect_name,
+            is_prospect=True,
+            remaining_sessions=0,
+        )
+        db.session.add(member)
+        db.session.flush()
+        location_id = data.get("location_id")
+    else:
+        member = Member.query.filter_by(id=data["member_id"], trainer_id=trainer.id, is_prospect=False).first_or_404()
+        location_id = data.get("location_id") or member.location_id
+
     event_date = datetime.fromisoformat(data["date"]).date()
     start_time = datetime.strptime(data["start_time"], "%H:%M").time()
     end_time = datetime.strptime(data["end_time"], "%H:%M").time()
@@ -91,7 +115,6 @@ def create_event():
     if slot_conflicts(trainer.id, event_date, start_time, end_time, location):
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
 
-    event_type = data.get("event_type") if data.get("event_type") in ("PT", "상담") else "PT"
     event = ScheduleEvent(
         trainer_id=trainer.id,
         member_id=member.id,
@@ -131,17 +154,26 @@ def update_event(event_id):
     if slot_conflicts(trainer.id, new_date, new_start, new_end, new_location, exclude_event_id=event.id):
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
 
-    if data.get("member_id"):
-        member = Member.query.filter_by(id=data["member_id"], trainer_id=trainer.id).first()
+    new_event_type = data["event_type"] if data.get("event_type") in ("PT", "상담") else event.event_type
+    if new_event_type == "상담":
+        prospect_name = (data.get("prospect_name") or "").strip()
+        if prospect_name and event.member and event.member.is_prospect:
+            event.member.name = prospect_name
+        elif prospect_name and not (event.member and event.member.is_prospect):
+            member = Member(trainer_id=trainer.id, name=prospect_name, is_prospect=True, remaining_sessions=0)
+            db.session.add(member)
+            db.session.flush()
+            event.member_id = member.id
+    elif data.get("member_id"):
+        member = Member.query.filter_by(id=data["member_id"], trainer_id=trainer.id, is_prospect=False).first()
         if member:
             event.member_id = member.id
+    event.event_type = new_event_type
     event.location_id = new_location_id
     event.date = new_date
     event.start_time = new_start
     event.end_time = new_end
     event.memo = data.get("memo", event.memo)
-    if data.get("event_type") in ("PT", "상담"):
-        event.event_type = data["event_type"]
     if data.get("status"):
         _apply_status(event, data["status"])
     db.session.commit()
@@ -153,7 +185,7 @@ def update_event(event_id):
 def delete_event(event_id):
     trainer = current_trainer()
     event = ScheduleEvent.query.filter_by(id=event_id, trainer_id=trainer.id).first_or_404()
-    if event.status == "확정":
+    if event.status == "확정" and event.event_type != "상담":
         event.member.remaining_sessions += 1
     db.session.delete(event)
     db.session.commit()

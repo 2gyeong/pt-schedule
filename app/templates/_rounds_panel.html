@@ -1,0 +1,46 @@
+<div class="callout">
+  <ul>
+    <li>지정한 기간 동안 선생님/회원이 저장해둔 고정 가능 시간을 기준으로 스케줄을 자동 배정해요.</li>
+    <li><strong>회원이 설정한 요일(예: 매주 월요일)이 이 기간 안에 포함되어야</strong> 배정될 수 있어요. 기간이 하루뿐이면 그 요일에 설정해둔 회원만 배정돼요.</li>
+    <li>시작일/종료일은 기본으로 다음 주 월요일~일요일이 채워져 있어요. 필요하면 직접 바꿔주세요.</li>
+  </ul>
+</div>
+
+<form method="post" action="{{ url_for('rounds.create_round') }}" class="member-form round-form" id="round-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>시작일
+    <input type="date" name="start_date" id="round-start" required>
+  </label>
+  <label>종료일
+    <input type="date" name="end_date" id="round-end" required>
+  </label>
+  <label>PT 시간(분)
+    <input type="number" name="session_minutes" value="50" min="10" step="5" required>
+  </label>
+  <button type="submit">새 회차 시작</button>
+</form>
+<p class="hint range-weekday-hint" data-active-weekdays='{{ active_weekday_names | tojson }}'></p>
+
+<table class="member-table">
+  <thead>
+    <tr><th>기간</th><th>PT 시간</th><th>상태</th><th></th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for r in rounds %}
+    <tr>
+      <td>{{ r.start_date.month }}월 {{ ((r.start_date.day - 1) // 7) + 1 }}주차 ({{ r.start_date.strftime('%y.%m.%d') }} ~ {{ r.end_date.strftime('%y.%m.%d') }})</td>
+      <td>{{ r.session_minutes }}분</td>
+      <td><span class="status-badge status-{{ r.status }}">{{ r.status }}</span></td>
+      <td><a href="{{ url_for('rounds.round_detail', round_id=r.id) }}">상세보기</a></td>
+      <td>
+        <form method="post" action="{{ url_for('rounds.delete_round', round_id=r.id) }}" class="round-delete-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="danger">삭제</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">생성된 회차가 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

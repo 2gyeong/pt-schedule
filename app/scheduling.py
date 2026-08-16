@@ -472,7 +472,7 @@ def generate_schedule(round_obj):
 
     # 이번 라운드에 명시적으로 "제출"한 회원만 계산 대상에 포함 (이 트레이너 소속 회원으로 한정)
     trainer_member_ids = {
-        m.id for m in Member.query.filter_by(trainer_id=round_obj.trainer_id, is_deleted=False).all()
+        m.id for m in Member.query.filter_by(trainer_id=round_obj.trainer_id, is_deleted=False, is_prospect=False).all()
     }
     submitted_member_ids = {
         s.member_id for s in RoundSubmission.query.filter_by(round_id=round_obj.id).all()

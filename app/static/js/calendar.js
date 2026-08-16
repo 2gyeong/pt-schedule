@@ -12,6 +12,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const idField = document.getElementById("event-id");
   const typeField = document.getElementById("event-type");
   const memberField = document.getElementById("event-member");
+  const memberFieldWrap = document.getElementById("event-member-field");
+  const prospectField = document.getElementById("event-prospect-field");
+  const prospectNameField = document.getElementById("event-prospect-name");
   const locationField = document.getElementById("event-location");
   const dateField = document.getElementById("event-date");
   const startField = document.getElementById("event-start");
@@ -62,8 +65,16 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
   });
+  function toggleMemberFields() {
+    const isConsult = typeField.value === "상담";
+    memberFieldWrap.classList.toggle("hidden", isConsult);
+    prospectField.classList.toggle("hidden", !isConsult);
+    memberField.required = !isConsult;
+    prospectNameField.required = isConsult;
+  }
   typeField.addEventListener("change", function () {
     if (startField.value) endField.value = addMinutes(startField.value, durationForType());
+    toggleMemberFields();
   });
 
   const cubeContainer = document.getElementById("event-time-cubes");
@@ -89,6 +100,8 @@ document.addEventListener("DOMContentLoaded", function () {
     modalTitle.textContent = "일정 등록";
     idField.value = "";
     typeField.value = "PT";
+    prospectNameField.value = "";
+    toggleMemberFields();
     locationField.value = "";
     dateField.value = dateStr;
     setStartTime("10:00");
@@ -113,14 +126,28 @@ document.addEventListener("DOMContentLoaded", function () {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
+  const weekLabelEl = document.getElementById("calendar-week-label");
+  function updateWeekLabel(info) {
+    if (info.view.type !== "timeGridWeek") {
+      weekLabelEl.textContent = "";
+      return;
+    }
+    const sunday = info.start;
+    const month = sunday.getMonth() + 1;
+    const week = Math.floor((sunday.getDate() - 1) / 7) + 1;
+    weekLabelEl.textContent = `${month}월 ${week}주차`;
+  }
+
   const calendarEl = document.getElementById("calendar");
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "timeGridWeek",
+    locale: "ko",
     headerToolbar: {
       left: "prev,next today",
       center: "title",
       right: "timeGridWeek,dayGridMonth",
     },
+    datesSet: updateWeekLabel,
     slotMinTime: String(scheduleStartHour).padStart(2, "0") + ":00:00",
     slotMaxTime: String(scheduleEndHour).padStart(2, "0") + ":00:00",
     dayCellClassNames: function (arg) {
@@ -156,7 +183,12 @@ document.addEventListener("DOMContentLoaded", function () {
       const event = info.event;
       idField.value = event.id;
       typeField.value = event.extendedProps.event_type || "PT";
-      memberField.value = event.extendedProps.member_id;
+      if (typeField.value === "상담") {
+        prospectNameField.value = event.extendedProps.member_name || "";
+      } else {
+        memberField.value = event.extendedProps.member_id;
+      }
+      toggleMemberFields();
       locationField.value = event.extendedProps.location_id || "";
       dateField.value = event.startStr.slice(0, 10);
       startField.value = event.startStr.slice(11, 16);
@@ -201,6 +233,7 @@ document.addEventListener("DOMContentLoaded", function () {
     e.preventDefault();
     const payload = {
       member_id: memberField.value,
+      prospect_name: prospectNameField.value,
       location_id: locationField.value || null,
       date: dateField.value,
       start_time: startField.value,
@@ -269,5 +302,23 @@ document.addEventListener("DOMContentLoaded", function () {
         closeModal();
       }
     });
+  });
+
+  const roundsToggleBtn = document.getElementById("rounds-toggle-btn");
+  const roundsPanelWrap = document.getElementById("rounds-panel-wrap");
+  let roundsLoaded = false;
+  roundsToggleBtn.addEventListener("click", function () {
+    const willShow = roundsPanelWrap.classList.contains("hidden");
+    roundsPanelWrap.classList.toggle("hidden", !willShow);
+    roundsToggleBtn.textContent = willShow ? "스케줄링 회차 ▴" : "스케줄링 회차 ▾";
+    if (willShow && !roundsLoaded) {
+      fetch("/rounds", { headers: { "X-Requested-With": "fetch" } })
+        .then((r) => r.json())
+        .then((data) => {
+          roundsPanelWrap.innerHTML = data.html;
+          roundsLoaded = true;
+          initRoundsPanel(roundsPanelWrap);
+        });
+    }
   });
 });

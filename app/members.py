@@ -13,12 +13,12 @@ members_bp = Blueprint("members", __name__)
 def list_members():
     trainer = current_trainer()
     members = (
-        Member.query.filter_by(trainer_id=trainer.id, is_deleted=False)
+        Member.query.filter_by(trainer_id=trainer.id, is_deleted=False, is_prospect=False)
         .order_by(Member.name)
         .all()
     )
     deleted_members = (
-        Member.query.filter_by(trainer_id=trainer.id, is_deleted=True)
+        Member.query.filter_by(trainer_id=trainer.id, is_deleted=True, is_prospect=False)
         .order_by(Member.name)
         .all()
     )

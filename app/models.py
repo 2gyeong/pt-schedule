@@ -54,6 +54,7 @@ class Member(db.Model):
         db.String(32), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(16)
     )
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
+    is_prospect = db.Column(db.Boolean, nullable=False, default=False)  # 상담만 진행한 미등록 신규 문의자
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     location = db.relationship("Location")
