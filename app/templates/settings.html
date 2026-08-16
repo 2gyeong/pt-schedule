@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}환경설정{% endblock %}
+{% block content %}
+<h1>환경설정</h1>
+
+<h2>비밀번호 변경</h2>
+<form method="post" action="{{ url_for('settings.change_password') }}" class="member-form" style="flex-direction:column; align-items:stretch; max-width:320px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>현재 비밀번호 <input type="password" name="current_password" required></label>
+  <label>새 비밀번호 <input type="password" name="new_password" required></label>
+  <label>새 비밀번호 확인 <input type="password" name="new_password_confirm" required></label>
+  <button type="submit">변경</button>
+</form>
+
+<h2>지점 관리</h2>
+<p class="hint">PT 지점 등록·색상·지점 간 이동 시간 설정은 지점 관리 페이지에서 할 수 있어요.</p>
+<a href="{{ url_for('locations.list_locations') }}" class="copy-link-btn">지점 관리 열기</a>
+{% endblock %}
