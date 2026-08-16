@@ -238,7 +238,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       if (info.event.extendedProps.status === "확정") {
-        if (!confirm("확정된 스케줄은 드래그 변경 시 변경하시겠습니까?")) {
+        if (!confirm("변경하시겠습니까?")) {
           info.revert();
           return;
         }
