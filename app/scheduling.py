@@ -46,6 +46,7 @@ def _distance(loc_a, loc_b) -> float:
 
 AVG_TRAVEL_SPEED_KMH = 15  # 선생님이 대중교통으로 이동 (직선거리 기준 실효 속도, 환승 등 포함해 보수적으로 가정)
 MIN_TRAVEL_BUFFER_MIN = 20  # 지점이 달라지면, 아무리 가까워도 도보+대기 등 고정 오버헤드로 최소 이 정도는 비워둠
+MAX_GAP_MIN = 60  # 같은 날 세션 사이에 이 시간(분)보다 더 비지 않게 한다 (공강처럼 빈 시간 방지)
 
 
 def load_travel_overrides(trainer_id):
@@ -68,8 +69,47 @@ def _travel_minutes(loc_a, loc_b, overrides=None) -> int:
     return max(MIN_TRAVEL_BUFFER_MIN, math.ceil(km / AVG_TRAVEL_SPEED_KMH * 60))
 
 
+def _location_pattern_ok(day_entries, cursor, slot_end, location) -> bool:
+    """하루에 방문하는 지점은 최대 2곳까지만 허용하고, 한 번 떠난 지점으로
+    그날 다시 돌아가지 않게 한다 (이동을 최소화하기 위한 제약)."""
+    if location is None:
+        return True
+    combined = sorted(day_entries + [(cursor, slot_end, location)], key=lambda e: e[0])
+    sequence = []
+    for _, _, loc in combined:
+        loc_id = loc.id if loc is not None else None
+        if not sequence or sequence[-1] != loc_id:
+            sequence.append(loc_id)
+    if len(set(sequence)) > 2:
+        return False
+    if len(sequence) != len(set(sequence)):
+        return False
+    return True
+
+
+def _gap_ok(day_entries, cursor, slot_end) -> bool:
+    """삽입하려는 슬롯과, 하루 안에서 시간상 바로 앞/뒤에 오는 세션 사이의 빈 시간이
+    MAX_GAP_MIN을 넘지 않는지 확인한다 (공강처럼 비는 시간 방지). 그날 첫/유일한
+    세션이라 비교할 앞뒤 세션이 없으면 통과시킨다."""
+    before_end = None
+    after_start = None
+    for entry_start, entry_end, _ in day_entries:
+        if entry_end <= cursor and (before_end is None or entry_end > before_end):
+            before_end = entry_end
+        if entry_start >= slot_end and (after_start is None or entry_start < after_start):
+            after_start = entry_start
+    max_gap = timedelta(minutes=MAX_GAP_MIN)
+    if before_end is not None and (cursor - before_end) > max_gap:
+        return False
+    if after_start is not None and (after_start - slot_end) > max_gap:
+        return False
+    return True
+
+
 def _has_conflict(day_entries, cursor, slot_end, location, overrides=None) -> bool:
-    """시간이 겹치거나, 지점이 달라 이동시간이 부족하면 충돌로 본다."""
+    """시간이 겹치거나, 지점이 달라 이동시간이 부족하거나, 하루 이동 패턴이
+    비효율적이거나(지점 3곳 이상 또는 이미 떠난 지점 재방문), 세션 사이가 너무
+    비면(공강) 충돌로 본다."""
     for entry_start, entry_end, entry_loc in day_entries:
         if _overlaps(cursor, slot_end, entry_start, entry_end):
             return True
@@ -81,6 +121,10 @@ def _has_conflict(day_entries, cursor, slot_end, location, overrides=None) -> bo
             return True
         if slot_end <= entry_start and (entry_start - slot_end) < buffer:
             return True
+    if not _location_pattern_ok(day_entries, cursor, slot_end, location):
+        return True
+    if not _gap_ok(day_entries, cursor, slot_end):
+        return True
     return False
 
 
