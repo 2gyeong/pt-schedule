@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function durationForType() {
-    return typeField.value === "상담" ? 30 : 60;
+    return typeField.value === "상담" ? 30 : 50;
   }
 
   function setStartTime(time) {
@@ -169,8 +169,12 @@ document.addEventListener("DOMContentLoaded", function () {
     eventDurationEditable: false,
     eventContent: function (arg) {
       const time = formatEventTime(arg.event.start);
+      const color = arg.event.backgroundColor || arg.event.borderColor || "#888";
+      const dot = arg.view.type === "dayGridMonth"
+        ? `<span class="fc-event-compact-dot" style="background:${color}"></span>`
+        : "";
       return {
-        html: `<div class="fc-event-compact"><span class="fc-event-compact-time">${time}</span><span class="fc-event-compact-title">${arg.event.title}</span></div>`,
+        html: `<div class="fc-event-compact">${dot}<span class="fc-event-compact-time">${time}</span><span class="fc-event-compact-title">${arg.event.title}</span></div>`,
       };
     },
     dayCellClassNames: function (arg) {
@@ -295,7 +299,7 @@ document.addEventListener("DOMContentLoaded", function () {
       locationField.value = event.extendedProps.location_id || "";
       dateField.value = event.startStr.slice(0, 10);
       startField.value = event.startStr.slice(11, 16);
-      endField.value = event.endStr.slice(11, 16);
+      endField.value = addMinutes(startField.value, durationForType());
       statusField.value = event.extendedProps.status;
       memoField.value = event.extendedProps.memo;
       document.querySelectorAll(".time-cube").forEach(function (cube) {
