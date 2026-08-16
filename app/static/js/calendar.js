@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const startField = document.getElementById("event-start");
   const endField = document.getElementById("event-end");
   const statusField = document.getElementById("event-status");
+  const statusFieldWrap = document.getElementById("event-status-field");
   const memoField = document.getElementById("event-memo");
   const deleteBtn = document.getElementById("delete-btn");
   const cancelBtn = document.getElementById("cancel-btn");
@@ -109,6 +110,7 @@ document.addEventListener("DOMContentLoaded", function () {
     statusField.value = "확정";
     normalActions.classList.remove("hidden");
     requestActions.classList.add("hidden");
+    statusFieldWrap.classList.remove("hidden");
     deleteBtn.classList.add("hidden");
     openModal();
   }
@@ -119,6 +121,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   let selectedMemberId = "";
   const AVAILABILITY_SOURCE_ID = "member-availability";
+  const DRAG_AVAILABILITY_SOURCE_ID = "drag-availability";
+
+  function showCalendarFlash(message) {
+    const flash = document.getElementById("reassign-flash");
+    if (!flash) return;
+    flash.innerHTML = message ? `<ul class="flash"><li>${message}</li></ul>` : "";
+  }
 
   const holidaysEl = document.getElementById("kr-holidays");
   const KR_HOLIDAYS = holidaysEl ? JSON.parse(holidaysEl.textContent) : {};
@@ -156,6 +165,8 @@ document.addEventListener("DOMContentLoaded", function () {
     datesSet: updateWeekLabel,
     slotMinTime: String(scheduleStartHour).padStart(2, "0") + ":00:00",
     slotMaxTime: String(scheduleEndHour).padStart(2, "0") + ":00:00",
+    snapDuration: "00:10:00",
+    eventDurationEditable: false,
     eventContent: function (arg) {
       const time = formatEventTime(arg.event.start);
       return {
@@ -180,6 +191,11 @@ document.addEventListener("DOMContentLoaded", function () {
       return { html: `<span class="fc-daynum">${arg.text}</span><span class="fc-holiday-label">${name}</span>` };
     },
     events: "/api/events",
+    eventDataTransform: function (raw) {
+      raw.startEditable = raw.extendedProps.status === "요청" || raw.extendedProps.status === "확정";
+      raw.durationEditable = false;
+      return raw;
+    },
     eventClassNames: function (arg) {
       const classes = arg.event.extendedProps.status === "요청" ? ["ev-pending"] : [];
       if (arg.event.extendedProps.event_type === "상담") classes.push("ev-consult");
@@ -190,6 +206,79 @@ document.addEventListener("DOMContentLoaded", function () {
     },
     dateClick: function (info) {
       openCreateModal(info.dateStr);
+    },
+    eventDragStart: function (info) {
+      if (info.event.extendedProps.status !== "요청") return;
+      const roundId = info.event.extendedProps.round_id;
+      const memberId = info.event.extendedProps.member_id;
+      if (!roundId) return;
+      showCalendarFlash("");
+      fetch(`/rounds/${roundId}/members/${memberId}/valid-slots?exclude_event_id=${info.event.id}`)
+        .then((r) => r.json())
+        .then((slots) => {
+          if (slots.length === 0) {
+            showCalendarFlash("이 회원은 이번 회차 기간에 옮길 수 있는 다른 시간이 없어요. (이미 다른 예약이 그 회원의 가능한 요일을 모두 채웠어요)");
+            return;
+          }
+          calendar.addEventSource({ id: DRAG_AVAILABILITY_SOURCE_ID, events: slots });
+        });
+    },
+    eventDragStop: function () {
+      const src = calendar.getEventSourceById(DRAG_AVAILABILITY_SOURCE_ID);
+      if (src) src.remove();
+    },
+    eventDrop: function (info) {
+      const start = info.event.start;
+      const end = info.event.end;
+      function toDate(d) {
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      }
+      function toTime(d) {
+        return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+      }
+
+      if (info.event.extendedProps.status === "확정") {
+        if (!confirm("확정된 스케줄은 드래그 변경 시 변경하시겠습니까?")) {
+          info.revert();
+          return;
+        }
+        fetch(`/api/events/${info.event.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+          body: JSON.stringify({
+            date: toDate(start),
+            start_time: toTime(start),
+            end_time: toTime(end),
+          }),
+        }).then((res) => {
+          if (!res.ok) {
+            res.json().then((data) => alert(data.error || "변경하지 못했어요."));
+            info.revert();
+          }
+        });
+        return;
+      }
+
+      const roundId = info.event.extendedProps.round_id;
+      if (!roundId) { info.revert(); return; }
+      const slot = `${toDate(start)}|${toTime(start)}|${toTime(end)}`;
+
+      const formData = new FormData();
+      formData.set("csrf_token", csrfToken);
+      formData.set("slot", slot);
+
+      fetch(`/rounds/${roundId}/events/${info.event.id}/reassign`, {
+        method: "POST",
+        headers: { "X-Requested-With": "fetch" },
+        body: formData,
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          showCalendarFlash(data.message);
+          const eventsSection = document.getElementById("events-section");
+          if (data.table_html && eventsSection) eventsSection.innerHTML = data.table_html;
+          if (!data.ok) info.revert();
+        });
     },
     eventClick: function (info) {
       const event = info.event;
@@ -215,10 +304,12 @@ document.addEventListener("DOMContentLoaded", function () {
         modalTitle.textContent = "예약 요청 확인";
         normalActions.classList.add("hidden");
         requestActions.classList.remove("hidden");
+        statusFieldWrap.classList.add("hidden");
       } else {
         modalTitle.textContent = "일정 수정";
         normalActions.classList.remove("hidden");
         requestActions.classList.add("hidden");
+        statusFieldWrap.classList.remove("hidden");
         deleteBtn.classList.remove("hidden");
       }
       openModal();
