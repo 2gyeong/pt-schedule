@@ -442,6 +442,28 @@ th.fc-holiday .fc-daynum { display: block; }
 
 .copy-link-btn { background: var(--surface-alt); color: var(--text); }
 .copy-link-btn:hover { background: var(--border-soft); }
+
+.announcement-edit-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.announcement-edit-form textarea {
+  width: 100%;
+  font-family: inherit;
+}
+.announcement-edit-form label.hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.announcement-actions {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
 a.copy-link-btn {
   display: inline-flex;
   align-items: center;

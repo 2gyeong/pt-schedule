@@ -15,23 +15,22 @@
 <h2>게시중 ({{ published|length }})</h2>
 <table class="member-table">
   <thead>
-    <tr><th>내용</th><th>등록일</th><th>상태</th><th></th></tr>
+    <tr><th style="width:55%;">내용</th><th>등록일</th><th>상태</th><th></th></tr>
   </thead>
   <tbody>
     {% for a in published %}
     <tr>
       <td>
-        <form method="post" action="{{ url_for('announcements.edit_announcement', announcement_id=a.id) }}"
-              style="display:flex; gap:6px; align-items:flex-start;">
+        <form method="post" action="{{ url_for('announcements.edit_announcement', announcement_id=a.id) }}" class="announcement-edit-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <textarea name="content" rows="2" required style="width:100%; max-width:380px; font-family:inherit;">{{ a.content }}</textarea>
+          <textarea name="content" rows="2" required>{{ a.content }}</textarea>
           <button type="submit" class="copy-link-btn">수정</button>
         </form>
       </td>
       <td>{{ a.created_at.strftime("%y.%m.%d %H:%M") }}</td>
-      <td><span class="status-badge status-제출완료">게시중</span></td>
-      <td style="display:flex; gap:6px;">
-        <button type="button" class="copy-link-btn toggle-published-btn" data-id="{{ a.id }}">미게시로</button>
+      <td><span class="status-badge status-확정">게시중</span></td>
+      <td class="announcement-actions">
+        <button type="button" class="copy-link-btn toggle-published-btn" data-id="{{ a.id }}">공지 내리기</button>
         <form method="post" action="{{ url_for('announcements.delete_announcement', announcement_id=a.id) }}"
               onsubmit="return confirm('삭제할까요?');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -48,17 +47,16 @@
 <h2 style="margin-top:32px;">미게시 ({{ unpublished|length }})</h2>
 <table class="member-table">
   <thead>
-    <tr><th>내용</th><th>등록일</th><th>상태</th><th></th></tr>
+    <tr><th style="width:55%;">내용</th><th>등록일</th><th>상태</th><th></th></tr>
   </thead>
   <tbody>
     {% for a in unpublished %}
     <tr>
       <td>
-        <form method="post" action="{{ url_for('announcements.edit_announcement', announcement_id=a.id) }}"
-              style="display:flex; gap:6px; align-items:flex-start;">
+        <form method="post" action="{{ url_for('announcements.edit_announcement', announcement_id=a.id) }}" class="announcement-edit-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <textarea name="content" rows="2" required style="width:100%; max-width:340px; font-family:inherit;">{{ a.content }}</textarea>
-          <label class="hint" style="white-space:nowrap;">게시 예약
+          <textarea name="content" rows="2" required>{{ a.content }}</textarea>
+          <label class="hint">게시 예약 시간
             <input type="datetime-local" name="publish_at" value="{{ a.publish_at.strftime('%Y-%m-%dT%H:%M') if a.publish_at else '' }}">
           </label>
           <button type="submit" class="copy-link-btn">수정</button>
@@ -67,12 +65,12 @@
       <td>{{ a.created_at.strftime("%y.%m.%d %H:%M") }}</td>
       <td>
         {% if a.is_published and a.publish_at %}
-        <span class="status-badge status-대기">{{ a.publish_at.strftime("%y.%m.%d %H:%M") }} 예약됨</span>
+        <span class="status-badge status-계산됨">{{ a.publish_at.strftime("%y.%m.%d %H:%M") }} 예약됨</span>
         {% else %}
-        <span class="status-badge status-거절됨">미게시</span>
+        <span class="status-badge status-대기">미게시</span>
         {% endif %}
       </td>
-      <td style="display:flex; gap:6px;">
+      <td class="announcement-actions">
         <button type="button" class="copy-link-btn toggle-published-btn" data-id="{{ a.id }}">
           {{ "바로 게시" if not a.is_published else "예약 취소하고 바로 게시" }}
         </button>

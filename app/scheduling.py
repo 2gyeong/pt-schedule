@@ -428,10 +428,13 @@ def generate_schedule(round_obj):
 
     # 날짜별 타임라인: [(start_dt, end_dt, location)]
     day_timeline = {}
+    # 회원별로 이미 확정/완료된 날짜 - 같은 회원이 같은 날 두 번 배정되지 않도록 (다른 회차 건 포함)
+    member_existing_dates = {}
     for e in existing_events:
         day_timeline.setdefault(e.date, []).append(
             (_to_dt(e.date, e.start_time), _to_dt(e.date, e.end_time), e.location)
         )
+        member_existing_dates.setdefault(e.member_id, set()).add(e.date)
 
     # 요일별 선생님 가능 시간대 (반복 패턴)
     trainer_by_weekday = {}
@@ -532,11 +535,13 @@ def generate_schedule(round_obj):
         # 먼저 "어느 날짜에 배정할지"를 정한다 (하루 걸러 배정을 최대한 우선), 그 다음에
         # 각 날짜 안에서 이동거리가 최소가 되는 시간을 고른다. 이렇게 날짜 선택을 먼저 해야
         # 이동거리 최적화 때문에 원하는 요일 간격이 깨지는 걸 막을 수 있다.
+        member_booked_dates = member_existing_dates.get(member_id, set())
         feasible_days = sorted(
             {
                 w[0]
                 for w in windows
-                if _day_has_feasible_slot(
+                if w[0] not in member_booked_dates
+                and _day_has_feasible_slot(
                     w[0], w[1], w[2], day_timeline, location, session_len, step, is_blacked_out, travel_overrides
                 )
             }
