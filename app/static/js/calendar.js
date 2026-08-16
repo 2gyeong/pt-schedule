@@ -136,16 +136,23 @@ document.addEventListener("DOMContentLoaded", function () {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
-  const weekLabelEl = document.getElementById("calendar-week-label");
   function updateWeekLabel(info) {
+    const titleEl = document.querySelector("#calendar .fc-toolbar-title");
+    if (!titleEl) return;
+    let labelEl = document.getElementById("calendar-week-label");
     if (info.view.type !== "timeGridWeek") {
-      weekLabelEl.textContent = "";
+      if (labelEl) labelEl.remove();
       return;
     }
     const sunday = info.start;
     const month = sunday.getMonth() + 1;
     const week = Math.floor((sunday.getDate() - 1) / 7) + 1;
-    weekLabelEl.textContent = `${month}월 ${week}주차`;
+    if (!labelEl) {
+      labelEl = document.createElement("div");
+      labelEl.id = "calendar-week-label";
+      titleEl.parentNode.insertBefore(labelEl, titleEl);
+    }
+    labelEl.textContent = `${month}월 ${week}주차`;
   }
 
   function formatEventTime(date) {
