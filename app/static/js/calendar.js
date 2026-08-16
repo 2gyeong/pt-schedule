@@ -168,6 +168,7 @@ document.addEventListener("DOMContentLoaded", function () {
     snapDuration: "00:10:00",
     eventDurationEditable: false,
     eventContent: function (arg) {
+      if (arg.event.display === "background") return true;
       const time = formatEventTime(arg.event.start);
       const color = arg.event.backgroundColor || arg.event.borderColor || "#888";
       const dot = arg.view.type === "dayGridMonth"
