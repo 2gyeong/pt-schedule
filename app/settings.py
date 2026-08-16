@@ -14,6 +14,12 @@ def show_settings():
     return render_template("settings.html")
 
 
+@settings_bp.route("/settings/password", methods=["GET"])
+@login_required
+def show_password_page():
+    return render_template("change_password.html")
+
+
 @settings_bp.route("/settings/password", methods=["POST"])
 @login_required
 def change_password():
@@ -32,4 +38,5 @@ def change_password():
         trainer.password_hash = generate_password_hash(new_password)
         db.session.commit()
         flash("비밀번호를 변경했습니다.")
-    return redirect(url_for("settings.show_settings"))
+        return redirect(url_for("settings.show_settings"))
+    return redirect(url_for("settings.show_password_page"))

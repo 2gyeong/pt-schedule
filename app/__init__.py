@@ -50,13 +50,13 @@ def create_app():
         except (TypeError, ValueError):
             return None
 
-    from app.context import current_trainer, pending_change_requests_count
+    from app.context import current_trainer, pending_notifications_count
 
     @app.context_processor
     def inject_current_trainer():
         return {
             "current_trainer": current_trainer,
-            "pending_change_requests_count": pending_change_requests_count,
+            "pending_notifications_count": pending_notifications_count,
         }
 
     with app.app_context():

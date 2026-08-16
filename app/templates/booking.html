@@ -29,8 +29,9 @@
     <li>
       <span>{{ e.date.isoformat() }} {{ e.start_time.strftime("%H:%M") }}~{{ e.end_time.strftime("%H:%M") }}
         {% if e.location %} @ {{ e.location.name }}{% endif %}</span>
-      {% if e.id in change_pending_event_ids %}
+      {% if e.id in pending_change_request_by_event %}
       <span class="pending">수정 요청 대기중</span>
+      <button type="button" class="copy-link-btn cancel-change-request-btn" data-request-id="{{ pending_change_request_by_event[e.id] }}">요청 취소</button>
       {% else %}
       <button type="button" class="copy-link-btn change-request-btn"
               data-event-id="{{ e.id }}" data-date="{{ e.date.isoformat() }}"
@@ -78,13 +79,29 @@
 {% endif %}
 <div id="availability-grid"></div>
 
-<h2>선생님께 하고 싶은 말</h2>
-<p class="hint">몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 적어주세요.</p>
-<form method="post" action="{{ url_for('booking.save_note', token=member.booking_token) }}" class="member-form">
+<h2>선생님께 메시지 보내기</h2>
+<p class="hint">몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 보내주세요. 선생님께 알림이 가요.</p>
+<form method="post" action="{{ url_for('booking.send_message', token=member.booking_token) }}" class="member-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <textarea name="note" rows="3" style="width:100%; max-width:480px; font-family:inherit;" placeholder="몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 적어주세요.">{{ member.note or "" }}</textarea>
-  <button type="submit">저장</button>
+  <textarea name="content" rows="3" required style="width:100%; max-width:480px; font-family:inherit;" placeholder="몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 적어주세요."></textarea>
+  <button type="submit">보내기</button>
 </form>
+{% if messages %}
+<ul class="submission-list" style="max-width:480px;">
+  {% for msg in messages %}
+  <li>
+    <span style="white-space:pre-wrap; {% if msg.status == '취소됨' %}text-decoration:line-through; color:var(--text-muted);{% endif %}">
+      {{ msg.content }}
+    </span>
+    {% if msg.status == "전송됨" %}
+    <button type="button" class="copy-link-btn cancel-message-btn" data-message-id="{{ msg.id }}">취소</button>
+    {% else %}
+    <span class="pending">취소됨</span>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
 
 <p class="hint">위 "확정된 예약" 목록에서 "수정 요청" 버튼을 누르면, 아래 달력에서 원하는 날짜를 클릭해 새 시간을 요청할 수 있어요.</p>
 <div class="legend">
@@ -143,7 +160,8 @@
         .map(function (e) {
           const loc = e.location_name ? ` @ ${e.location_name}` : "";
           const action = e.change_pending
-            ? `<span class="pending">수정 요청 대기중</span>`
+            ? `<span class="pending">수정 요청 대기중</span>
+               <button type="button" class="copy-link-btn cancel-change-request-btn" data-request-id="${e.change_request_id}">요청 취소</button>`
             : `<button type="button" class="copy-link-btn change-request-btn"
                  data-event-id="${e.id}" data-date="${e.date}" data-start="${e.start_time}" data-end="${e.end_time}">수정 요청</button>`;
           return `<li><span>${e.date} ${e.start_time}~${e.end_time}${loc}</span>${action}</li>`;
@@ -166,8 +184,34 @@
     list.addEventListener("click", function (e) {
       const btn = e.target.closest(".change-request-btn");
       if (btn && window.startChangeMode) window.startChangeMode(btn);
+      const cancelBtn = e.target.closest(".cancel-change-request-btn");
+      if (cancelBtn) {
+        if (!confirm("이 변경 요청을 취소할까요?")) return;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
+        fetch(`/book/${token}/events/${cancelBtn.dataset.requestId}/change-request/cancel`, {
+          method: "POST",
+          headers: { "X-CSRFToken": csrfToken },
+        }).then(() => refreshConfirmedEvents());
+      }
     });
   })();
+</script>
+<script>
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".cancel-message-btn");
+    if (!btn) return;
+    if (!confirm("이 메시지를 취소할까요?")) return;
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = `/book/{{ member.booking_token }}/messages/${btn.dataset.messageId}/cancel`;
+    const csrf = document.createElement("input");
+    csrf.type = "hidden";
+    csrf.name = "csrf_token";
+    csrf.value = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
+    form.appendChild(csrf);
+    document.body.appendChild(form);
+    form.submit();
+  });
 </script>
 <script src="{{ url_for('static', filename='js/booking.js') }}"></script>
 {% endblock %}

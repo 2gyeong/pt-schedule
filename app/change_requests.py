@@ -4,8 +4,8 @@ from flask import Blueprint, flash, jsonify, redirect, render_template, url_for
 from flask_login import login_required
 
 from app import db
-from app.context import current_trainer
-from app.models import ChangeRequest
+from app.context import current_trainer, pending_notifications_count
+from app.models import ChangeRequest, MemberMessage
 from app.scheduling import slot_conflicts
 
 change_requests_bp = Blueprint("change_requests", __name__)
@@ -28,18 +28,35 @@ def list_change_requests():
         .limit(10)
         .all()
     )
+    unread_messages = (
+        MemberMessage.query.filter_by(trainer_id=trainer.id, status="전송됨", is_read=False)
+        .order_by(MemberMessage.created_at)
+        .all()
+    )
     initial_date = min((r.requested_date for r in pending), default=date.today())
     return render_template(
-        "change_requests.html", pending=pending, handled=handled, initial_date=initial_date
+        "change_requests.html",
+        pending=pending,
+        handled=handled,
+        unread_messages=unread_messages,
+        initial_date=initial_date,
     )
+
+
+@change_requests_bp.route("/messages/<int:message_id>/read", methods=["POST"])
+@login_required
+def mark_message_read(message_id):
+    trainer = current_trainer()
+    message = MemberMessage.query.filter_by(id=message_id, trainer_id=trainer.id).first_or_404()
+    message.is_read = True
+    db.session.commit()
+    return redirect(url_for("change_requests.list_change_requests"))
 
 
 @change_requests_bp.route("/api/change-requests/count", methods=["GET"])
 @login_required
 def change_requests_count():
-    trainer = current_trainer()
-    count = ChangeRequest.query.filter_by(trainer_id=trainer.id, status="대기").count()
-    return jsonify({"count": count})
+    return jsonify({"count": pending_notifications_count()})
 
 
 @change_requests_bp.route("/change-requests/<int:request_id>/accept", methods=["POST"])

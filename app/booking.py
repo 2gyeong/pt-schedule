@@ -8,6 +8,7 @@ from app.models import (
     ChangeRequest,
     Location,
     Member,
+    MemberMessage,
     RecurringAvailability,
     RecurringTrainerAvailability,
     RoundSubmission,
@@ -56,13 +57,18 @@ def book_page(token):
         .order_by(ScheduleEvent.date, ScheduleEvent.start_time)
         .all()
     )
-    change_pending_event_ids = {
-        r.event_id
+    pending_change_request_by_event = {
+        r.event_id: r.id
         for r in ChangeRequest.query.filter_by(member_id=member.id, status="대기").all()
     }
     announcements = (
         Announcement.query.filter_by(trainer_id=member.trainer_id)
         .order_by(Announcement.created_at.desc())
+        .all()
+    )
+    messages = (
+        MemberMessage.query.filter_by(member_id=member.id)
+        .order_by(MemberMessage.created_at.desc())
         .all()
     )
 
@@ -75,8 +81,9 @@ def book_page(token):
         upcoming_round=upcoming_round,
         already_submitted=already_submitted,
         confirmed_events=confirmed_events,
-        change_pending_event_ids=change_pending_event_ids,
+        pending_change_request_by_event=pending_change_request_by_event,
         announcements=announcements,
+        messages=messages,
         schedule_start_hour=trainer.schedule_start_hour,
         schedule_end_hour=trainer.schedule_end_hour,
     )
@@ -90,8 +97,8 @@ def confirmed_events_api(token):
         .order_by(ScheduleEvent.date, ScheduleEvent.start_time)
         .all()
     )
-    pending_event_ids = {
-        r.event_id
+    pending_change_request_by_event = {
+        r.event_id: r.id
         for r in ChangeRequest.query.filter_by(member_id=member.id, status="대기").all()
     }
     return jsonify(
@@ -102,7 +109,8 @@ def confirmed_events_api(token):
                 "start_time": e.start_time.strftime("%H:%M"),
                 "end_time": e.end_time.strftime("%H:%M"),
                 "location_name": e.location.name if e.location else None,
-                "change_pending": e.id in pending_event_ids,
+                "change_pending": e.id in pending_change_request_by_event,
+                "change_request_id": pending_change_request_by_event.get(e.id),
             }
             for e in events
         ]
@@ -149,10 +157,34 @@ def create_change_request(token, event_id):
     return jsonify({"ok": True}), 201
 
 
-@booking_bp.route("/book/<token>/note", methods=["POST"])
-def save_note(token):
+@booking_bp.route("/book/<token>/events/<int:change_request_id>/change-request/cancel", methods=["POST"])
+def cancel_change_request(token, change_request_id):
+    """회원이 자기가 보낸 변경 요청을 취소한다. 기록은 지우지 않고 상태만 취소됨으로 바꾼다."""
     member = Member.query.filter_by(booking_token=token).first_or_404()
-    member.note = request.form.get("note", "").strip() or None
+    req = ChangeRequest.query.filter_by(
+        id=change_request_id, member_id=member.id, status="대기"
+    ).first_or_404()
+    req.status = "취소됨"
+    db.session.commit()
+    return jsonify({"ok": True}), 200
+
+
+@booking_bp.route("/book/<token>/messages", methods=["POST"])
+def send_message(token):
+    member = Member.query.filter_by(booking_token=token).first_or_404()
+    content = request.form.get("content", "").strip()
+    if content:
+        db.session.add(MemberMessage(trainer_id=member.trainer_id, member_id=member.id, content=content))
+        db.session.commit()
+    return redirect(url_for("booking.book_page", token=token))
+
+
+@booking_bp.route("/book/<token>/messages/<int:message_id>/cancel", methods=["POST"])
+def cancel_message(token, message_id):
+    """회원이 자기가 보낸 메시지를 취소한다. 기록은 지우지 않고 상태만 취소됨으로 바꾼다."""
+    member = Member.query.filter_by(booking_token=token).first_or_404()
+    message = MemberMessage.query.filter_by(id=message_id, member_id=member.id, status="전송됨").first_or_404()
+    message.status = "취소됨"
     db.session.commit()
     return redirect(url_for("booking.book_page", token=token))
 
@@ -177,7 +209,7 @@ def my_events(token):
         result.append(
             {
                 "id": e.id,
-                "title": f"내 예약 ({location_name})",
+                "title": f"{member.name} ({location_name})",
                 "start": f"{e.date.isoformat()}T{e.start_time.isoformat()}",
                 "end": f"{e.date.isoformat()}T{e.end_time.isoformat()}",
                 "backgroundColor": color,

@@ -67,7 +67,7 @@
           {% endif %}
           {% endif %}
         </td>
-        <td>{{ member.note or "-" }}</td>
+        <td>{{ member.latest_message_preview() or "-" }}</td>
         <td>{{ member.remaining_sessions }}</td>
         <td>
           <input type="number" name="quota_{{ member.id }}" min="0"

@@ -24,7 +24,7 @@
     <a href="{{ url_for('settings.show_settings') }}" class="{{ 'active' if request.blueprint == 'settings' }}">환경설정</a>
     <a href="{{ url_for('change_requests.list_change_requests') }}" class="nav-bell {{ 'active' if request.blueprint == 'change_requests' }}" id="change-requests-link">
       🔔
-      <span id="change-requests-badge" class="badge {% if not pending_change_requests_count() %}hidden{% endif %}">{{ pending_change_requests_count() }}</span>
+      <span id="change-requests-badge" class="badge {% if not pending_notifications_count() %}hidden{% endif %}">{{ pending_notifications_count() }}</span>
     </a>
     {% endif %}
     <a href="{{ url_for('auth.logout') }}" class="logout">로그아웃</a>

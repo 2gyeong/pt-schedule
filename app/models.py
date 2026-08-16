@@ -65,6 +65,14 @@ class Member(db.Model):
         "RecurringAvailability", backref="member", cascade="all, delete-orphan"
     )
 
+    def latest_message_preview(self):
+        msg = (
+            MemberMessage.query.filter_by(member_id=self.id, status="전송됨")
+            .order_by(MemberMessage.created_at.desc())
+            .first()
+        )
+        return msg.content if msg else None
+
 
 class TrainerBlackout(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -201,3 +209,17 @@ class Announcement(db.Model):
         if self.publish_at and self.publish_at > datetime.utcnow():
             return False
         return True
+
+
+class MemberMessage(db.Model):
+    """회원이 선생님에게 보내는 메시지. 취소해도 기록은 지우지 않고 상태만 바꾼다."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"), nullable=False)
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(10), nullable=False, default="전송됨")  # 전송됨 / 취소됨
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    member = db.relationship("Member")

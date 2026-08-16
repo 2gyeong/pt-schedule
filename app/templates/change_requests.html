@@ -10,6 +10,30 @@
 {% block content %}
 <h1>예약 변경 요청</h1>
 
+{% if unread_messages %}
+<h2>새 메시지 ({{ unread_messages|length }})</h2>
+<table class="member-table" style="margin-bottom:28px;">
+  <thead>
+    <tr><th>회원</th><th>메시지</th><th>받은 시각</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for msg in unread_messages %}
+    <tr>
+      <td>{{ msg.member.name }}</td>
+      <td style="white-space:pre-wrap;">{{ msg.content }}</td>
+      <td>{{ msg.created_at.strftime("%y.%m.%d %H:%M") }}</td>
+      <td>
+        <form method="post" action="{{ url_for('change_requests.mark_message_read', message_id=msg.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="copy-link-btn">확인함</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
 {% if not pending %}
 <p class="hint">대기 중인 변경 요청이 없어요.</p>
 {% else %}

@@ -1,7 +1,7 @@
 from flask import session
 from flask_login import current_user
 
-from app.models import ChangeRequest, Trainer
+from app.models import ChangeRequest, MemberMessage, Trainer
 
 
 def current_trainer():
@@ -22,3 +22,17 @@ def pending_change_requests_count():
     if not isinstance(trainer, Trainer) or trainer.role != "trainer":
         return 0
     return ChangeRequest.query.filter_by(trainer_id=trainer.id, status="대기").count()
+
+
+def pending_notifications_count():
+    """벨 아이콘 배지에 쓰는 값: 대기 중인 변경 요청 + 안 읽은 회원 메시지."""
+    if not current_user.is_authenticated:
+        return 0
+    trainer = current_trainer()
+    if not isinstance(trainer, Trainer) or trainer.role != "trainer":
+        return 0
+    change_requests = ChangeRequest.query.filter_by(trainer_id=trainer.id, status="대기").count()
+    unread_messages = MemberMessage.query.filter_by(
+        trainer_id=trainer.id, status="전송됨", is_read=False
+    ).count()
+    return change_requests + unread_messages

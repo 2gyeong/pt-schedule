@@ -57,7 +57,7 @@
           <button type="submit" class="copy-link-btn">저장</button>
         </form>
       </td>
-      <td>{{ member.note or "-" }}</td>
+      <td>{{ member.latest_message_preview() or "-" }}</td>
       <td class="link-actions">
         <button type="button" class="copy-link-btn"
                 data-link="{{ url_for('booking.book_page', token=member.booking_token, _external=True) }}">
