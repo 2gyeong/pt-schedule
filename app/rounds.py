@@ -363,4 +363,4 @@ def approve(round_id):
     round_obj.status = "확정"
     db.session.commit()
     flash(f"{len(events)}건이 확정되었습니다.")
-    return redirect(url_for("rounds.round_detail", round_id=round_id))
+    return redirect(url_for("schedule.calendar_view"))

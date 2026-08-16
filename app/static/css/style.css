@@ -105,6 +105,14 @@ h2 {
   letter-spacing: -0.005em;
 }
 
+.panel-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28px;
+}
+.panel-section-head h2 { margin: 0; }
+
 .flash {
   list-style: none;
   padding: 12px 16px;

@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.15/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/ko.global.min.js"></script>
 {% endblock %}
+{% block flash %}{% endblock %}
 {% block content %}
 <h1>PT 일정</h1>
 <div class="legend">
@@ -96,7 +97,7 @@
 {% endwith %}
 <p class="hint" style="margin-top:8px;"><a href="{{ url_for('rounds.list_rounds') }}">지난 회차 보기 →</a></p>
 {% else %}
-<h2>스케줄링 회차</h2>
+<h2>계획하기</h2>
 <div class="callout">
   <p>진행 중인 회차가 없어요. 아래에서 새 회차를 시작하면 회원별 횟수 입력과 배정 결과가 여기에 나타나요.</p>
 </div>
