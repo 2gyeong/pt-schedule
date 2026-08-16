@@ -112,22 +112,24 @@ def _events_context(round_obj):
     return events, slot_options_by_event
 
 
-@rounds_bp.route("/rounds/<int:round_id>")
-@login_required
-def round_detail(round_id):
-    trainer = current_trainer()
-    round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
+def active_round_for(trainer):
+    return SchedulingRound.query.filter_by(trainer_id=trainer.id).filter(
+        SchedulingRound.status.in_(["대기", "계산됨"])
+    ).first()
+
+
+def round_panel_context(round_obj, trainer):
+    """활성 회차 패널(_active_round_panel.html)을 렌더링하는 데 필요한 컨텍스트.
+    round_detail()과 달력 페이지(schedule.calendar_view) 양쪽에서 공유해서 쓴다."""
     members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False, is_prospect=False).order_by(Member.name).all()
     submitted_member_ids = {
-        s.member_id for s in RoundSubmission.query.filter_by(round_id=round_id).all()
+        s.member_id for s in RoundSubmission.query.filter_by(round_id=round_obj.id).all()
     }
     quota_by_member = {
-        q.member_id: q.count for q in RoundQuota.query.filter_by(round_id=round_id).all()
+        q.member_id: q.count for q in RoundQuota.query.filter_by(round_id=round_obj.id).all()
     }
     events, slot_options_by_event = _events_context(round_obj)
-
-    return render_template(
-        "round_detail.html",
+    return dict(
         round=round_obj,
         members=members,
         submitted_member_ids=submitted_member_ids,
@@ -135,6 +137,17 @@ def round_detail(round_id):
         events=events,
         slot_options_by_event=slot_options_by_event,
     )
+
+
+@rounds_bp.route("/rounds/<int:round_id>")
+@login_required
+def round_detail(round_id):
+    trainer = current_trainer()
+    round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
+    if round_obj.status != "확정":
+        # 진행 중인 회차는 달력 페이지에서 관리한다 (일원화).
+        return redirect(url_for("schedule.calendar_view"))
+    return render_template("round_detail.html", **round_panel_context(round_obj, trainer))
 
 
 @rounds_bp.route("/rounds/<int:round_id>/members/<int:member_id>/toggle-submitted", methods=["POST"])

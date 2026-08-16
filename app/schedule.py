@@ -7,6 +7,7 @@ from app import db
 from app.context import current_trainer
 from app.holidays import KR_HOLIDAYS
 from app.models import Location, Member, ScheduleEvent
+from app.rounds import active_round_for, round_panel_context
 from app.scheduling import member_available_background, slot_conflicts
 
 schedule_bp = Blueprint("schedule", __name__)
@@ -63,7 +64,18 @@ def calendar_view():
         .all()
     )
     locations = Location.query.filter_by(trainer_id=trainer.id).order_by(Location.name).all()
-    return render_template("calendar.html", members=members, locations=locations, holidays=KR_HOLIDAYS)
+
+    active_round = active_round_for(trainer)
+    round_context = round_panel_context(active_round, trainer) if active_round else None
+
+    return render_template(
+        "calendar.html",
+        members=members,
+        locations=locations,
+        holidays=KR_HOLIDAYS,
+        active_round=active_round,
+        round_context=round_context,
+    )
 
 
 @schedule_bp.route("/api/events", methods=["GET"])

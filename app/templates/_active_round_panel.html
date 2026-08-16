@@ -1,0 +1,233 @@
+<div class="status-card">
+  <div class="status-card-top">
+    <span class="status-card-title">
+      {{ round.start_date.month }}월 {{ ((round.start_date.day - 1) // 7) + 1 }}주차
+      ({{ round.start_date.strftime('%y.%m.%d') }}~{{ round.end_date.strftime('%y.%m.%d') }}) 예약 페이지입니다
+    </span>
+    <span class="status-badge status-{{ round.status }}">{{ round.status }}</span>
+  </div>
+  <p class="status-card-desc">
+    {% if round.status == "대기" %}
+    아직 스케줄이 계산되지 않았어요. 아래에서 회원별 이번 회차 횟수를 입력하고 스케줄을 생성해주세요.
+    {% elif round.status == "계산됨" %}
+    스케줄이 계산됐지만 아직 회원에게 확정되지 않았어요. 아래 제안된 일정을 검토한 뒤 승인하면 회원에게 확정돼요. 시간을 바꾸고 싶으면 위 달력에서 해당 일정을 끌어서 옮기거나, 아래 표에서 다른 시간을 골라주세요.
+    {% else %}
+    회원에게 확정된 일정이에요. 더 이상 배정 결과를 수정할 수 없어요.
+    {% endif %}
+    (PT 시간: {{ round.session_minutes }}분)
+  </p>
+</div>
+
+{% if round.status != "확정" %}
+<form method="post" action="{{ url_for('rounds.update_dates', round_id=round.id) }}" class="member-form" id="dates-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>시작일 <input type="date" name="start_date" id="dates-start" value="{{ round.start_date.isoformat() }}" required></label>
+  <label>종료일 <input type="date" name="end_date" id="dates-end" value="{{ round.end_date.isoformat() }}" required></label>
+  <button type="submit">기간 수정</button>
+</form>
+{% endif %}
+
+<h2>회원별 이번 회차 횟수</h2>
+<div class="callout">
+  <ul>
+    <li>회원이 직접 "제출"을 눌러야 아래 표에 "제출완료"로 표시되고, 계산 대상에 포함돼요.</li>
+    <li>회원이 앱 밖에서 알려줬다면 "선생님 승인" 버튼으로 대신 제출완료 처리할 수 있어요.</li>
+    <li>회원마다 이번 기간에 몇 번 PT할지 입력하세요. 잔여 횟수보다 많이 넣어도 잔여 횟수만큼만 배정돼요.</li>
+  </ul>
+</div>
+
+{% if round.status != "확정" %}
+<div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+  <button type="button" id="mark-all-submitted-btn" class="copy-link-btn">
+    전체 일괄 승인
+  </button>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('rounds.generate', round_id=round.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <table class="member-table">
+    <thead>
+      <tr><th>회원</th><th>이번 회차 제출</th><th>비고</th><th>잔여 횟수</th><th>이번 회차 횟수</th></tr>
+    </thead>
+    <tbody>
+      {% for member in members %}
+      <tr>
+        <td>{{ member.name }}</td>
+        <td class="submit-status" data-member-id="{{ member.id }}">
+          {% if member.id in submitted_member_ids %}
+          <span class="ok">제출완료</span>
+          {% if round.status != "확정" %}
+          <button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="{{ member.id }}">취소</button>
+          {% endif %}
+          {% else %}
+          <span class="pending">미제출</span>
+          {% if round.status != "확정" %}
+          <button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="{{ member.id }}">선생님 승인</button>
+          {% endif %}
+          {% endif %}
+        </td>
+        <td>{{ member.note or "-" }}</td>
+        <td>{{ member.remaining_sessions }}</td>
+        <td>
+          <input type="number" name="quota_{{ member.id }}" min="0"
+                 max="{{ member.remaining_sessions }}"
+                 value="{{ quota_by_member.get(member.id, [1, member.remaining_sessions] | min) }}" style="width:70px">
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">등록된 회원이 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="modal-actions">
+    <button type="submit">이번 회차 횟수 저장하고 스케줄 생성</button>
+  </div>
+</form>
+
+<div id="reassign-flash">
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul class="flash">
+      {% for message in messages %}
+        <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+</div>
+
+<div id="events-section">
+  {% include "_round_events_table.html" %}
+</div>
+
+{% if round.status == "계산됨" %}
+<div class="round-approve-row">
+  <form method="post" action="{{ url_for('rounds.approve', round_id=round.id) }}"
+        onsubmit="return confirm('제안된 스케줄을 모두 확정할까요? 확정 시 회원별 잔여 횟수가 차감됩니다.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">회차 승인 (일괄 확정)</button>
+  </form>
+</div>
+{% endif %}
+
+{% if round.status != "확정" %}
+<script>
+  const datesForm = document.getElementById("dates-form");
+  const dStart = document.getElementById("dates-start");
+  const dEnd = document.getElementById("dates-end");
+  dEnd.min = dStart.value;
+  dStart.addEventListener("change", function () {
+    dEnd.min = dStart.value;
+    if (dEnd.value < dStart.value) dEnd.value = dStart.value;
+  });
+  datesForm.addEventListener("submit", function (e) {
+    if (dEnd.value < dStart.value) {
+      e.preventDefault();
+      alert("종료일이 시작일보다 빠를 수 없어요.");
+    }
+  });
+
+  function renderSubmitCell(memberId, submitted) {
+    const cell = document.querySelector(`.submit-status[data-member-id="${memberId}"]`);
+    if (!cell) return;
+    if (submitted) {
+      cell.innerHTML = '<span class="ok">제출완료</span>' +
+        '<button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="' + memberId + '">취소</button>';
+    } else {
+      cell.innerHTML = '<span class="pending">미제출</span>' +
+        '<button type="button" class="copy-link-btn toggle-submitted-btn" data-member-id="' + memberId + '">선생님 승인</button>';
+    }
+  }
+
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".toggle-submitted-btn");
+    if (!btn) return;
+    const memberId = btn.dataset.memberId;
+    fetch(`/rounds/{{ round.id }}/members/${memberId}/toggle-submitted`, {
+      method: "POST",
+      headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) renderSubmitCell(memberId, data.submitted);
+      });
+  });
+
+  const markAllBtn = document.getElementById("mark-all-submitted-btn");
+  if (markAllBtn) {
+    markAllBtn.addEventListener("click", function () {
+      if (!confirm("제출하지 않은 모든 회원을 제출완료로 처리할까요?")) return;
+      fetch(`/rounds/{{ round.id }}/mark-all-submitted`, {
+        method: "POST",
+        headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          (data.member_ids || []).forEach((id) => renderSubmitCell(id, true));
+        });
+    });
+  }
+
+  const eventsSection = document.getElementById("events-section");
+  const reassignFlash = document.getElementById("reassign-flash");
+
+  function showReassignFlash(message) {
+    if (!message) { reassignFlash.innerHTML = ""; return; }
+    reassignFlash.innerHTML = `<ul class="flash"><li>${message}</li></ul>`;
+  }
+
+  function refreshMainCalendar() {
+    if (window.ptCalendar) window.ptCalendar.refetchEvents();
+  }
+
+  function submitReassign(url, formData) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "X-Requested-With": "fetch" },
+      body: formData,
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.table_html) eventsSection.innerHTML = data.table_html;
+        showReassignFlash(data.message);
+        if (data.ok) refreshMainCalendar();
+        return data;
+      });
+  }
+
+  eventsSection.addEventListener("submit", function (e) {
+    const form = e.target.closest(".reassign-form");
+    if (!form) return;
+    e.preventDefault();
+    submitReassign(form.action, new FormData(form));
+  });
+
+  function updateQuotaInput(memberId, quota) {
+    const input = document.querySelector(`input[name="quota_${memberId}"]`);
+    if (input) input.value = quota;
+  }
+
+  function deleteEvent(eventId) {
+    if (!confirm("이 일정을 삭제할까요? 이번 회차 횟수도 1 줄어들어요.")) return;
+    fetch(`/rounds/{{ round.id }}/events/${eventId}/delete`, {
+      method: "POST",
+      headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.ok) { alert(data.message || "삭제하지 못했어요."); return; }
+        if (data.table_html) eventsSection.innerHTML = data.table_html;
+        showReassignFlash(data.message);
+        refreshMainCalendar();
+        if (data.member_id != null) updateQuotaInput(data.member_id, data.quota);
+      });
+  }
+
+  eventsSection.addEventListener("click", function (e) {
+    const btn = e.target.closest(".delete-event-btn");
+    if (!btn) return;
+    deleteEvent(btn.dataset.eventId);
+  });
+</script>
+{% endif %}

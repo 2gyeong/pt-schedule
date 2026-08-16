@@ -89,12 +89,28 @@
   </div>
 </div>
 
-<h2 style="margin-top:48px;">
-  <button type="button" id="rounds-toggle-btn" class="copy-link-btn">스케줄링 회차 ▾</button>
-</h2>
-<div id="rounds-panel-wrap" class="hidden"></div>
+<div style="margin-top:48px;">
+{% if active_round %}
+{% with round=round_context.round, members=round_context.members, submitted_member_ids=round_context.submitted_member_ids, quota_by_member=round_context.quota_by_member, events=round_context.events, slot_options_by_event=round_context.slot_options_by_event %}
+{% include "_active_round_panel.html" %}
+{% endwith %}
+<p class="hint" style="margin-top:8px;"><a href="{{ url_for('rounds.list_rounds') }}">지난 회차 보기 →</a></p>
+{% else %}
+<h2>스케줄링 회차</h2>
+<div class="callout">
+  <p>진행 중인 회차가 없어요. 아래에서 새 회차를 시작하면 회원별 횟수 입력과 배정 결과가 여기에 나타나요.</p>
+</div>
+<form method="post" action="{{ url_for('rounds.create_round') }}" class="member-form" id="new-round-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>시작일 <input type="date" name="start_date" id="new-round-start" required></label>
+  <label>종료일 <input type="date" name="end_date" id="new-round-end" required></label>
+  <label>PT 시간(분) <input type="number" name="session_minutes" value="50" min="10" step="5" required></label>
+  <button type="submit">새 회차 시작</button>
+</form>
+<p class="hint"><a href="{{ url_for('rounds.list_rounds') }}">지난 회차 보기 →</a></p>
+{% endif %}
+</div>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/rounds_panel.js') }}"></script>
 <script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
 {% endblock %}

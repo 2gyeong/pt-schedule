@@ -213,6 +213,7 @@ document.addEventListener("DOMContentLoaded", function () {
     },
   });
   calendar.render();
+  window.ptCalendar = calendar;
 
   document.getElementById("member-filter").addEventListener("change", function () {
     selectedMemberId = this.value || "";
@@ -304,21 +305,51 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  const roundsToggleBtn = document.getElementById("rounds-toggle-btn");
-  const roundsPanelWrap = document.getElementById("rounds-panel-wrap");
-  let roundsLoaded = false;
-  roundsToggleBtn.addEventListener("click", function () {
-    const willShow = roundsPanelWrap.classList.contains("hidden");
-    roundsPanelWrap.classList.toggle("hidden", !willShow);
-    roundsToggleBtn.textContent = willShow ? "스케줄링 회차 ▴" : "스케줄링 회차 ▾";
-    if (willShow && !roundsLoaded) {
-      fetch("/rounds", { headers: { "X-Requested-With": "fetch" } })
+  const newRoundForm = document.getElementById("new-round-form");
+  if (newRoundForm) {
+    const nrStart = document.getElementById("new-round-start");
+    const nrEnd = document.getElementById("new-round-end");
+
+    function toIsoDate(d) {
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+    function nextMonday() {
+      const d = new Date();
+      const day = d.getDay();
+      let diff = (1 - day + 7) % 7;
+      if (diff === 0) diff = 7;
+      d.setDate(d.getDate() + diff);
+      return d;
+    }
+    const defaultStart = nextMonday();
+    const defaultEnd = new Date(defaultStart);
+    defaultEnd.setDate(defaultStart.getDate() + 6);
+    nrStart.value = toIsoDate(defaultStart);
+    nrEnd.value = toIsoDate(defaultEnd);
+    nrStart.addEventListener("change", function () {
+      nrEnd.min = nrStart.value;
+      if (nrEnd.value < nrStart.value) nrEnd.value = nrStart.value;
+    });
+
+    newRoundForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (nrEnd.value < nrStart.value) {
+        alert("종료일이 시작일보다 빠를 수 없어요.");
+        return;
+      }
+      fetch(newRoundForm.action, {
+        method: "POST",
+        headers: { "X-Requested-With": "fetch" },
+        body: new FormData(newRoundForm),
+      })
         .then((r) => r.json())
         .then((data) => {
-          roundsPanelWrap.innerHTML = data.html;
-          roundsLoaded = true;
-          initRoundsPanel(roundsPanelWrap);
+          if (data.ok) {
+            window.location.reload();
+          } else {
+            alert(data.message || "회차를 시작하지 못했어요.");
+          }
         });
-    }
-  });
+    });
+  }
 });
