@@ -6,8 +6,8 @@ from flask_login import login_required
 from app import db
 from app.context import current_trainer
 from app.holidays import KR_HOLIDAYS
-from app.models import Location, Member, RecurringTrainerAvailability, ScheduleEvent
-from app.rounds import active_round_for, round_panel_context
+from app.models import Location, Member, RecurringAvailability, RecurringTrainerAvailability, ScheduleEvent
+from app.rounds import active_round_for, round_panel_context, unassigned_members_for_round
 from app.scheduling import member_available_background, slot_conflicts
 
 schedule_bp = Blueprint("schedule", __name__)
@@ -22,6 +22,16 @@ def _display_hour_range(trainer):
         start_hour = min(start_hour, t.start_time.hour)
         end_hour = max(end_hour, t.end_time.hour + (1 if t.end_time.minute else 0))
     return start_hour, min(end_hour, 24)
+
+
+def _within_member_availability(member, event_date, start_time, end_time) -> bool:
+    """회원이 스스로 등록해둔 고정 가능 시간 안에 이 슬롯이 완전히 들어가는지."""
+    weekday = event_date.weekday()
+    blocks = RecurringAvailability.query.filter_by(member_id=member.id, weekday=weekday).all()
+    for b in blocks:
+        if b.start_time <= start_time and end_time <= b.end_time:
+            return True
+    return False
 
 
 def _apply_status(event: ScheduleEvent, new_status: str):
@@ -78,6 +88,7 @@ def calendar_view():
 
     active_round = active_round_for(trainer)
     round_context = round_panel_context(active_round, trainer) if active_round else None
+    unassigned_members = unassigned_members_for_round(active_round) if active_round else []
     display_start_hour, display_end_hour = _display_hour_range(trainer)
 
     return render_template(
@@ -87,6 +98,7 @@ def calendar_view():
         holidays=KR_HOLIDAYS,
         active_round=active_round,
         round_context=round_context,
+        unassigned_members=unassigned_members,
         display_start_hour=display_start_hour,
         display_end_hour=display_end_hour,
     )
@@ -141,9 +153,20 @@ def create_event():
     if slot_conflicts(trainer.id, event_date, start_time, end_time, location):
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
 
+    round_id = data.get("round_id") if event_type == "PT" else None
+    # 미배정 목록에서 달력으로 끌어와 강제 등록하는 경우: 선생님은 마스터 권한으로 회원이
+    # 설정한 시간이 아니어도 등록할 수 있지만, 먼저 그렇다는 걸 알려주고 확인을 받는다.
+    if round_id and not data.get("confirmed_outside_availability"):
+        if not _within_member_availability(member, event_date, start_time, end_time):
+            return jsonify({
+                "needs_confirmation": True,
+                "message": f"이 시간은 {member.name}님이 설정한 가능 시간이 아니에요. 그래도 등록할까요?",
+            })
+
     event = ScheduleEvent(
         trainer_id=trainer.id,
         member_id=member.id,
+        round_id=round_id,
         location_id=location_id,
         date=event_date,
         start_time=start_time,

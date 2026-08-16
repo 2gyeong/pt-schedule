@@ -139,6 +139,29 @@ def round_panel_context(round_obj, trainer):
     )
 
 
+def unassigned_members_for_round(round_obj):
+    """이번 회차에서 희망 횟수(RoundQuota)보다 실제 배정된 건수가 적은 회원 목록.
+    달력 오른쪽 '미배정' 목록에 드래그 가능한 블록으로 보여주는 용도."""
+    quotas = RoundQuota.query.filter_by(round_id=round_obj.id).all()
+    if not quotas:
+        return []
+    assigned_counts = dict(
+        db.session.query(ScheduleEvent.member_id, db.func.count(ScheduleEvent.id))
+        .filter(
+            ScheduleEvent.round_id == round_obj.id,
+            ScheduleEvent.status.in_(["요청", "확정"]),
+        )
+        .group_by(ScheduleEvent.member_id)
+        .all()
+    )
+    result = []
+    for q in quotas:
+        missing = q.count - assigned_counts.get(q.member_id, 0)
+        if missing > 0:
+            result.append({"member_id": q.member_id, "name": q.member.name, "missing": missing})
+    return result
+
+
 @rounds_bp.route("/rounds/<int:round_id>")
 @login_required
 def round_detail(round_id):

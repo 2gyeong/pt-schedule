@@ -98,7 +98,7 @@ document.addEventListener("DOMContentLoaded", function () {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
-  function openCreateModal(dateStr) {
+  function openCreateModal(dateStr, startTime) {
     modalTitle.textContent = "일정 등록";
     idField.value = "";
     typeField.value = "PT";
@@ -106,7 +106,7 @@ document.addEventListener("DOMContentLoaded", function () {
     toggleMemberFields();
     locationField.value = "";
     dateField.value = dateStr;
-    setStartTime("10:00");
+    setStartTime(startTime || "10:00");
     statusField.value = "확정";
     normalActions.classList.remove("hidden");
     requestActions.classList.add("hidden");
@@ -159,6 +159,48 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
   }
 
+  function handleUnassignedDrop(info) {
+    const el = info.draggedEl;
+    const memberId = el.dataset.memberId;
+    const panel = document.getElementById("unassigned-panel");
+    const roundId = panel ? panel.dataset.roundId : null;
+    if (!roundId) return;
+    const dateStr = toDateStr(info.date);
+    const startStr = formatEventTime(info.date);
+    const endStr = addMinutes(startStr, 50);
+
+    function submit(confirmed) {
+      fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify({
+          member_id: memberId,
+          location_id: null,
+          date: dateStr,
+          start_time: startStr,
+          end_time: endStr,
+          event_type: "PT",
+          round_id: roundId,
+          confirmed_outside_availability: confirmed,
+        }),
+      })
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (data.needs_confirmation) {
+            if (confirm(data.message)) submit(true);
+            return;
+          }
+          if (!ok) {
+            alert(data.error || "등록하지 못했어요.");
+            return;
+          }
+          calendar.refetchEvents();
+          decrementUnassignedBlock(memberId);
+        });
+    }
+    submit(false);
+  }
+
   const calendarEl = document.getElementById("calendar");
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "timeGridWeek",
@@ -174,6 +216,8 @@ document.addEventListener("DOMContentLoaded", function () {
     slotMaxTime: String(scheduleEndHour).padStart(2, "0") + ":00:00",
     snapDuration: "00:10:00",
     eventDurationEditable: false,
+    droppable: true,
+    drop: handleUnassignedDrop,
     eventContent: function (arg) {
       if (arg.event.display === "background") return true;
       const time = formatEventTime(arg.event.start);
@@ -219,7 +263,11 @@ document.addEventListener("DOMContentLoaded", function () {
       return classes;
     },
     dateClick: function (info) {
-      openCreateModal(info.dateStr);
+      if (info.view.type === "dayGridMonth") {
+        openCreateModal(toDateStr(info.date));
+      } else {
+        openCreateModal(toDateStr(info.date), formatEventTime(info.date));
+      }
     },
     eventDragStart: function (info) {
       if (info.event.extendedProps.status !== "요청") return;
@@ -331,6 +379,26 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   calendar.render();
   window.ptCalendar = calendar;
+
+  function decrementUnassignedBlock(memberId) {
+    const block = document.querySelector(`.unassigned-block[data-member-id="${memberId}"]`);
+    if (!block) return;
+    const remaining = Number(block.dataset.missing) - 1;
+    if (remaining <= 0) {
+      block.remove();
+      const list = document.getElementById("unassigned-list");
+      const panel = document.getElementById("unassigned-panel");
+      if (list && panel && !list.children.length) panel.remove();
+    } else {
+      block.dataset.missing = String(remaining);
+      block.querySelector(".unassigned-count").textContent = `${remaining}회`;
+    }
+  }
+
+  const unassignedListEl = document.getElementById("unassigned-list");
+  if (unassignedListEl) {
+    new FullCalendar.Draggable(unassignedListEl, { itemSelector: ".unassigned-block" });
+  }
 
   document.getElementById("member-filter").addEventListener("change", function () {
     selectedMemberId = this.value || "";

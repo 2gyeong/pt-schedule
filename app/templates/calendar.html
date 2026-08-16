@@ -21,16 +21,34 @@
     </select>
   </label>
 </div>
-<div class="legend">
-  {% for location in locations %}
-  <span class="legend-item"><span class="dot" style="background:{{ location.color }}"></span>{{ location.name }}</span>
-  {% endfor %}
-  <span class="legend-item"><span class="dot dot-pending"></span>승인 대기 (빗금)</span>
-  <span class="legend-item"><span class="dot" style="border:2px dashed var(--text-muted); background:transparent;"></span>상담 (점선 테두리)</span>
-  <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선택한 회원의 가능 시간</span>
+<div class="legend-row">
+  <div class="legend">
+    {% for location in locations %}
+    <span class="legend-item"><span class="dot" style="background:{{ location.color }}"></span>{{ location.name }}</span>
+    {% endfor %}
+    <span class="legend-item"><span class="dot dot-pending"></span>승인 대기 (빗금)</span>
+    <span class="legend-item"><span class="dot" style="border:2px dashed var(--text-muted); background:transparent;"></span>상담 (점선 테두리)</span>
+    <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선택한 회원의 가능 시간</span>
+  </div>
+  <button type="button" id="new-event-btn">+ 새 일정 등록</button>
 </div>
-<button type="button" id="new-event-btn">+ 새 일정 등록 (오늘)</button>
-<div id="calendar" data-start-hour="{{ display_start_hour }}" data-end-hour="{{ display_end_hour }}" data-round-start="{{ active_round.start_date.isoformat() if active_round else '' }}"></div>
+<div class="calendar-layout">
+  <div id="calendar" data-start-hour="{{ display_start_hour }}" data-end-hour="{{ display_end_hour }}" data-round-start="{{ active_round.start_date.isoformat() if active_round else '' }}"></div>
+  {% if unassigned_members %}
+  <aside id="unassigned-panel" data-round-id="{{ active_round.id }}">
+    <h3>미배정</h3>
+    <p class="hint">이번 회차에 아직 못 넣은 회원이에요. 달력으로 끌어다 놓으면 그 시간에 바로 등록돼요.</p>
+    <div id="unassigned-list">
+      {% for m in unassigned_members %}
+      <div class="unassigned-block" data-member-id="{{ m.member_id }}" data-name="{{ m.name }}" data-missing="{{ m.missing }}">
+        <span class="unassigned-name">{{ m.name }}</span>
+        <span class="unassigned-count">{{ m.missing }}회</span>
+      </div>
+      {% endfor %}
+    </div>
+  </aside>
+  {% endif %}
+</div>
 <script id="kr-holidays" type="application/json">{{ holidays | tojson }}</script>
 
 <div id="event-modal" class="modal hidden">

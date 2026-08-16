@@ -9,70 +9,77 @@
   {% block head %}{% endblock %}
 </head>
 <body>
-  {% block nav %}
-  {% if current_user.is_authenticated %}
-  <nav class="navbar">
-    {% if current_user.role == "admin" %}
-    <a href="{{ url_for('admin.list_trainers') }}" class="{{ 'active' if request.blueprint == 'admin' }}">관리자</a>
+  <div class="app-shell">
+    {% block nav %}
+    {% if current_user.is_authenticated %}
+    <nav class="sidebar">
+      <div class="sidebar-links">
+        {% if current_user.role == "admin" %}
+        <a href="{{ url_for('admin.list_trainers') }}" class="{{ 'active' if request.blueprint == 'admin' }}">관리자</a>
+        {% endif %}
+        {% if current_user.role != "admin" or session.get("impersonate_trainer_id") %}
+        <a href="{{ url_for('schedule.calendar_view') }}" class="{{ 'active' if request.blueprint == 'schedule' }}">달력</a>
+        <a href="{{ url_for('blackouts.list_blackouts') }}" class="{{ 'active' if request.blueprint == 'blackouts' }}">내 일정</a>
+        <a href="{{ url_for('members.list_members') }}" class="{{ 'active' if request.blueprint == 'members' }}">회원 관리</a>
+        <a href="{{ url_for('rounds.list_rounds') }}" class="{{ 'active' if request.blueprint == 'rounds' }}">계획하기</a>
+        <a href="{{ url_for('announcements.list_announcements') }}" class="{{ 'active' if request.blueprint == 'announcements' }}">공지사항</a>
+        <a href="{{ url_for('settings.show_settings') }}" class="{{ 'active' if request.blueprint == 'settings' }}">환경설정</a>
+        <a href="{{ url_for('change_requests.list_change_requests') }}" class="nav-bell {{ 'active' if request.blueprint == 'change_requests' }}" id="change-requests-link">
+          <span>🔔 알림</span>
+          <span id="change-requests-badge" class="badge {% if not pending_notifications_count() %}hidden{% endif %}">{{ pending_notifications_count() }}</span>
+        </a>
+        {% endif %}
+      </div>
+      <a href="{{ url_for('auth.logout') }}" class="logout">로그아웃</a>
+    </nav>
     {% endif %}
-    {% if current_user.role != "admin" or session.get("impersonate_trainer_id") %}
-    <a href="{{ url_for('schedule.calendar_view') }}" class="{{ 'active' if request.blueprint == 'schedule' }}">달력</a>
-    <a href="{{ url_for('blackouts.list_blackouts') }}" class="{{ 'active' if request.blueprint == 'blackouts' }}">내 일정</a>
-    <a href="{{ url_for('members.list_members') }}" class="{{ 'active' if request.blueprint == 'members' }}">회원 관리</a>
-    <a href="{{ url_for('rounds.list_rounds') }}" class="{{ 'active' if request.blueprint == 'rounds' }}">계획하기</a>
-    <a href="{{ url_for('announcements.list_announcements') }}" class="{{ 'active' if request.blueprint == 'announcements' }}">공지사항</a>
-    <a href="{{ url_for('settings.show_settings') }}" class="{{ 'active' if request.blueprint == 'settings' }}">환경설정</a>
-    <a href="{{ url_for('change_requests.list_change_requests') }}" class="nav-bell {{ 'active' if request.blueprint == 'change_requests' }}" id="change-requests-link">
-      🔔
-      <span id="change-requests-badge" class="badge {% if not pending_notifications_count() %}hidden{% endif %}">{{ pending_notifications_count() }}</span>
-    </a>
-    {% endif %}
-    <a href="{{ url_for('auth.logout') }}" class="logout">로그아웃</a>
-  </nav>
-  {% if session.get("impersonate_trainer_id") %}
-  <div class="impersonate-banner">
-    <strong>{{ current_trainer().name }}</strong>님 계정으로 보는 중입니다.
-  </div>
-  {% endif %}
-  {% endif %}
-  {% endblock %}
-
-  {% if current_user.is_authenticated %}
-  <script>
-    (function () {
-      const badge = document.getElementById("change-requests-badge");
-      if (!badge) return;
-      function refreshBadge() {
-        fetch("/api/change-requests/count")
-          .then((r) => r.json())
-          .then((data) => {
-            badge.textContent = data.count;
-            badge.classList.toggle("hidden", !data.count);
-          });
-      }
-      setInterval(refreshBadge, 30000);
-      document.addEventListener("visibilitychange", function () {
-        if (document.visibilityState === "visible") refreshBadge();
-      });
-    })();
-  </script>
-  {% endif %}
-
-  <main class="container">
-    {% block flash %}
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <ul class="flash">
-          {% for message in messages %}
-            <li>{{ message }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
     {% endblock %}
 
-    {% block content %}{% endblock %}
-  </main>
+    <div class="app-main">
+      {% if current_user.is_authenticated and session.get("impersonate_trainer_id") %}
+      <div class="impersonate-banner">
+        <strong>{{ current_trainer().name }}</strong>님 계정으로 보는 중입니다.
+      </div>
+      {% endif %}
+
+      {% if current_user.is_authenticated %}
+      <script>
+        (function () {
+          const badge = document.getElementById("change-requests-badge");
+          if (!badge) return;
+          function refreshBadge() {
+            fetch("/api/change-requests/count")
+              .then((r) => r.json())
+              .then((data) => {
+                badge.textContent = data.count;
+                badge.classList.toggle("hidden", !data.count);
+              });
+          }
+          setInterval(refreshBadge, 30000);
+          document.addEventListener("visibilitychange", function () {
+            if (document.visibilityState === "visible") refreshBadge();
+          });
+        })();
+      </script>
+      {% endif %}
+
+      <main class="container">
+        {% block flash %}
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul class="flash">
+              {% for message in messages %}
+                <li>{{ message }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+        {% endblock %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
 
   {% block scripts %}{% endblock %}
 </body>
