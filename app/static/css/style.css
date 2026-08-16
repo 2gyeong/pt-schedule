@@ -80,27 +80,6 @@ body {
   text-align: center;
 }
 
-.member-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-}
-.member-tabs a {
-  padding: 10px 16px;
-  text-decoration: none;
-  color: var(--text-muted);
-  font-weight: 500;
-  font-size: 0.92rem;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-.member-tabs a.active,
-.member-tabs a:hover {
-  color: var(--accent-hover);
-  border-bottom-color: var(--accent);
-}
-
 .fc-event.ev-mine {
   border-width: 2px !important;
   font-weight: 600;
@@ -635,6 +614,13 @@ span.danger { color: var(--danger); font-weight: 550; background: none; }
   overflow: hidden;
   white-space: nowrap;
   line-height: 1.3;
+}
+.fc-event-compact-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  align-self: center;
 }
 .fc-event-compact-time {
   font-weight: 700;

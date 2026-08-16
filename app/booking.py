@@ -157,43 +157,12 @@ def save_note(token):
     return redirect(url_for("booking.book_page", token=token))
 
 
-@booking_bp.route("/book/<token>/schedule")
-def shared_schedule(token):
+@booking_bp.route("/book/<token>/my-events", methods=["GET"])
+def my_events(token):
+    """이 회원 본인의 확정된 예약만 (다른 회원 예약은 절대 섞이지 않음). 달력에 실제 제목을 달아 보여주고,
+    클릭하면 바로 수정 요청으로 이어지는 용도."""
     member = Member.query.filter_by(booking_token=token).first_or_404()
-    trainer = Trainer.query.get(member.trainer_id)
-    confirmed_events = (
-        ScheduleEvent.query.filter_by(member_id=member.id, status="확정")
-        .order_by(ScheduleEvent.date, ScheduleEvent.start_time)
-        .all()
-    )
-    change_pending_event_ids = {
-        r.event_id
-        for r in ChangeRequest.query.filter_by(member_id=member.id, status="대기").all()
-    }
-    upcoming_round = _active_round(member.trainer_id)
-    already_submitted = False
-    if upcoming_round:
-        already_submitted = (
-            RoundSubmission.query.filter_by(round_id=upcoming_round.id, member_id=member.id).first()
-            is not None
-        )
-    return render_template(
-        "shared_schedule.html",
-        member=member,
-        confirmed_events=confirmed_events,
-        change_pending_event_ids=change_pending_event_ids,
-        upcoming_round=upcoming_round,
-        already_submitted=already_submitted,
-        schedule_start_hour=trainer.schedule_start_hour,
-        schedule_end_hour=trainer.schedule_end_hour,
-    )
-
-
-@booking_bp.route("/book/<token>/schedule/events")
-def shared_schedule_events(token):
-    member = Member.query.filter_by(booking_token=token).first_or_404()
-
-    query = ScheduleEvent.query.filter_by(status="확정", trainer_id=member.trainer_id)
+    query = ScheduleEvent.query.filter_by(status="확정", member_id=member.id)
     start = request.args.get("start")
     end = request.args.get("end")
     if start:
@@ -203,19 +172,18 @@ def shared_schedule_events(token):
 
     result = []
     for e in query.all():
-        is_mine = e.member_id == member.id
         location_name = e.location.name if e.location else "지점 미정"
         color = e.location.color if e.location else "#888"
         result.append(
             {
                 "id": e.id,
-                "title": f"내 예약 ({location_name})" if is_mine else location_name,
+                "title": f"내 예약 ({location_name})",
                 "start": f"{e.date.isoformat()}T{e.start_time.isoformat()}",
                 "end": f"{e.date.isoformat()}T{e.end_time.isoformat()}",
                 "backgroundColor": color,
-                "borderColor": "#37352f" if is_mine else color,
+                "borderColor": "#37352f",
                 "extendedProps": {
-                    "mine": is_mine,
+                    "mine": True,
                     "date": e.date.isoformat(),
                     "start_time": e.start_time.strftime("%H:%M"),
                     "end_time": e.end_time.strftime("%H:%M"),
@@ -278,10 +246,14 @@ def submit_for_round(token):
 
 @booking_bp.route("/book/<token>/busy", methods=["GET"])
 def busy_times(token):
+    """다른 회원들의 예약 시간(익명, 지점/이름 없이 회색 블록으로만). 본인 예약은 my_events()에서
+    실제 제목을 달아 따로 보여주므로 여기서는 제외한다."""
     member = Member.query.filter_by(booking_token=token).first_or_404()
 
     query = ScheduleEvent.query.filter(
-        ScheduleEvent.trainer_id == member.trainer_id, ScheduleEvent.status != "취소"
+        ScheduleEvent.trainer_id == member.trainer_id,
+        ScheduleEvent.status != "취소",
+        ScheduleEvent.member_id != member.id,
     )
     start = request.args.get("start")
     end = request.args.get("end")
@@ -325,31 +297,3 @@ def open_times(token):
     )
 
 
-@booking_bp.route("/book/<token>/request", methods=["POST"])
-def request_booking(token):
-    member = Member.query.filter_by(booking_token=token).first_or_404()
-    data = request.get_json()
-    if not data or not data.get("date") or not data.get("start_time") or not data.get("end_time"):
-        abort(400)
-
-    event_date = datetime.fromisoformat(data["date"]).date()
-    event_start = datetime.strptime(data["start_time"], "%H:%M").time()
-    event_end = datetime.strptime(data["end_time"], "%H:%M").time()
-    if datetime.combine(event_date, event_start) < datetime.now():
-        abort(400, description="지난 날짜/시간에는 요청할 수 없습니다.")
-    if event_end <= event_start:
-        abort(400, description="종료 시간이 시작 시간보다 늦어야 합니다.")
-
-    event = ScheduleEvent(
-        trainer_id=member.trainer_id,
-        member_id=member.id,
-        date=event_date,
-        start_time=event_start,
-        end_time=event_end,
-        memo=data.get("memo") or None,
-        source="member",
-        status="요청",
-    )
-    db.session.add(event)
-    db.session.commit()
-    return jsonify({"id": event.id}), 201

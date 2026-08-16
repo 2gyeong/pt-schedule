@@ -11,7 +11,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const DEFAULT_DURATION_MIN = 50;
 
   const modal = document.getElementById("request-modal");
-  const modalTitle = document.getElementById("request-modal-title");
   const form = document.getElementById("request-form");
   const dateField = document.getElementById("req-date");
   const startField = document.getElementById("req-start");
@@ -83,12 +82,17 @@ document.addEventListener("DOMContentLoaded", function () {
     calendarEl.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  function formatEventTime(date) {
+    return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+  }
+
   const calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: "dayGridMonth",
+    initialView: "timeGridWeek",
+    locale: "ko",
     headerToolbar: {
       left: "prev,next today",
       center: "title",
-      right: "dayGridMonth,timeGridWeek",
+      right: "timeGridWeek,dayGridMonth",
     },
     validRange: { start: todayStr() },
     slotMinTime: String(scheduleStartHour).padStart(2, "0") + ":00:00",
@@ -96,17 +100,37 @@ document.addEventListener("DOMContentLoaded", function () {
     eventSources: [
       { url: `/book/${token}/open-times` },
       { url: `/book/${token}/busy` },
+      { url: `/book/${token}/my-events` },
     ],
+    eventContent: function (arg) {
+      if (arg.event.display === "background") return true;
+      const time = formatEventTime(arg.event.start);
+      return {
+        html: `<div class="fc-event-compact"><span class="fc-event-compact-time">${time}</span><span class="fc-event-compact-title">${arg.event.title}</span></div>`,
+      };
+    },
+    eventClassNames: function (arg) {
+      return arg.event.extendedProps.mine ? ["ev-mine"] : [];
+    },
+    eventClick: function (info) {
+      const props = info.event.extendedProps;
+      if (!props.mine) return;
+      window.startChangeMode({
+        dataset: {
+          eventId: info.event.id,
+          date: props.date,
+          start: props.start_time,
+          end: props.end_time,
+        },
+      });
+    },
     dateClick: function (info) {
-      dateField.value = info.dateStr;
-      if (changeEventId) {
-        startField.value = changeOriginal.start;
-        modalTitle.textContent = "예약 변경 요청";
-      } else {
-        durationMin = DEFAULT_DURATION_MIN;
-        startField.value = "10:00";
-        modalTitle.textContent = "예약 요청";
+      if (!changeEventId) {
+        alert("먼저 위 목록이나 달력에서 변경할 내 예약을 선택해주세요.");
+        return;
       }
+      dateField.value = info.dateStr;
+      startField.value = changeOriginal.start;
       memoField.value = "";
       updateEndPreview();
       openModal();

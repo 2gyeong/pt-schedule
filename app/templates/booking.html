@@ -7,13 +7,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.15/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.15/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/ko.global.min.js"></script>
 {% endblock %}
 {% block content %}
-<div class="member-tabs">
-  <a href="{{ url_for('booking.book_page', token=member.booking_token) }}" class="active">내 예약/가능 시간</a>
-  <a href="{{ url_for('booking.shared_schedule', token=member.booking_token) }}">전체 스케줄</a>
-</div>
-
 <h1>{{ member.name }}님</h1>
 
 {% if announcements %}
@@ -90,8 +86,7 @@
   <button type="submit">저장</button>
 </form>
 
-<h2>급하게 개별 요청하기</h2>
-<p class="hint">고정 시간과 별개로 특정 날짜에 급하게 요청하고 싶으면 아래 달력에서 빈 날짜를 클릭하세요.</p>
+<p class="hint">위 "확정된 예약" 목록에서 "수정 요청" 버튼을 누르면, 아래 달력에서 원하는 날짜를 클릭해 새 시간을 요청할 수 있어요.</p>
 <div class="legend">
   <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선생님 가능 시간</span>
   <span class="legend-item"><span class="dot" style="background:#bbb"></span>이미 예약된 시간</span>
@@ -102,10 +97,10 @@
 
 <div id="request-modal" class="modal hidden">
   <div class="modal-box">
-    <h2 id="request-modal-title">예약 요청</h2>
+    <h2>예약 변경 요청</h2>
     <form id="request-form">
-      <label>날짜 <input type="date" id="req-date" required></label>
-      <label>시작 시간 <input type="time" id="req-start" required></label>
+      <label>새 날짜 <input type="date" id="req-date" required></label>
+      <label>새 시작 시간 <input type="time" id="req-start" required></label>
       <p class="hint" id="req-end-preview"></p>
       <label>메모 <input type="text" id="req-memo" placeholder="선택사항"></label>
       <div class="modal-actions">
@@ -113,7 +108,7 @@
         <button type="button" id="req-cancel-btn">취소</button>
       </div>
     </form>
-    <p id="request-success" class="hidden">요청이 접수되었습니다.</p>
+    <p id="request-success" class="hidden">변경 요청을 보냈어요. 선생님이 확인 후 처리해요.</p>
   </div>
 </div>
 {% endblock %}
