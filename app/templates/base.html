@@ -32,10 +32,6 @@
   {% if session.get("impersonate_trainer_id") %}
   <div class="impersonate-banner">
     <strong>{{ current_trainer().name }}</strong>님 계정으로 보는 중입니다.
-    <form method="post" action="{{ url_for('admin.stop_impersonating') }}" style="display:inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit">관리자로 돌아가기</button>
-    </form>
   </div>
   {% endif %}
   {% endif %}

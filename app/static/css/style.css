@@ -258,6 +258,37 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .member-table td:first-child,
 .member-table td:nth-child(2) { white-space: nowrap; }
 
+.event-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.reassign-form {
+  display: flex;
+  gap: 4px;
+}
+.reassign-select {
+  width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-holiday.fc-daygrid-day { background: var(--danger-soft); }
+.fc-holiday .fc-daynum { color: var(--danger); font-weight: 600; }
+.fc-holiday-label {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--danger);
+  line-height: 1.1;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+th.fc-holiday.fc-col-header-cell { background: var(--danger-soft); }
+th.fc-holiday .fc-daynum { display: block; }
+
 #calendar, #round-week-calendar {
   background: var(--surface);
   padding: 18px;

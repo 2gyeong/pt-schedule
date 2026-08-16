@@ -221,6 +221,41 @@ def reassign_event(round_id, event_id):
     return redirect(url_for("rounds.round_detail", round_id=round_id))
 
 
+@rounds_bp.route("/rounds/<int:round_id>/events/<int:event_id>/delete", methods=["POST"])
+@login_required
+def delete_event(round_id, event_id):
+    """이 회차의 배정 하나를 삭제한다. 이미 확정되어 잔여 횟수가 차감됐던 건이면 되돌려주고,
+    이번 회차에 설정해둔 희망 횟수(RoundQuota)도 1 줄여서 실제 배정 개수와 맞춘다."""
+    trainer = current_trainer()
+    round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
+    event = ScheduleEvent.query.filter_by(id=event_id, round_id=round_id).first_or_404()
+
+    member_id = event.member_id
+    if event.status in ("확정", "완료"):
+        event.member.remaining_sessions += 1
+
+    quota = RoundQuota.query.filter_by(round_id=round_id, member_id=member_id).first()
+    if quota and quota.count > 0:
+        quota.count -= 1
+
+    db.session.delete(event)
+    db.session.commit()
+
+    events, slot_options_by_event = _events_context(round_obj)
+    table_html = render_template(
+        "_round_events_table.html", round=round_obj, events=events,
+        slot_options_by_event=slot_options_by_event,
+    )
+    return jsonify({
+        "ok": True,
+        "message": "일정을 삭제했습니다.",
+        "table_html": table_html,
+        "event_id": event_id,
+        "member_id": member_id,
+        "quota": quota.count if quota else 0,
+    })
+
+
 @rounds_bp.route("/rounds/<int:round_id>/dates", methods=["POST"])
 @login_required
 def update_dates(round_id):

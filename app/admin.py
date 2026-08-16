@@ -23,6 +23,7 @@ def admin_required(view):
 @login_required
 @admin_required
 def list_trainers():
+    session.pop("impersonate_trainer_id", None)
     trainers = Trainer.query.filter(Trainer.role != "admin").order_by(Trainer.created_at.desc()).all()
     return render_template("admin.html", trainers=trainers)
 
@@ -56,11 +57,3 @@ def impersonate(trainer_id):
     trainer = Trainer.query.get_or_404(trainer_id)
     session["impersonate_trainer_id"] = trainer.id
     return redirect(url_for("schedule.calendar_view"))
-
-
-@admin_bp.route("/admin/stop-impersonating", methods=["POST"])
-@login_required
-@admin_required
-def stop_impersonating():
-    session.pop("impersonate_trainer_id", None)
-    return redirect(url_for("admin.list_trainers"))

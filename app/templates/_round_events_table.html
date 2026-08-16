@@ -13,24 +13,28 @@
       <td>{{ e.location.name if e.location else "-" }}</td>
       <td>{{ e.status }}</td>
       <td>
-        {% if e.status == "요청" and e.id in slot_options_by_event %}
-        {% set options = slot_options_by_event[e.id] %}
-        <form method="post" action="{{ url_for('rounds.reassign_event', round_id=round.id, event_id=e.id) }}"
-              class="reassign-form" data-event-id="{{ e.id }}"
-              style="display:flex; gap:4px;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <select name="slot" {% if not options %}disabled{% endif %}>
-            {% for d, s, en in options %}
-            <option value="{{ d.isoformat() }}|{{ s.strftime('%H:%M') }}|{{ en.strftime('%H:%M') }}"
-              {% if d == e.date and s == e.start_time %}selected{% endif %}>
-              {{ d.isoformat() }} {{ s.strftime('%H:%M') }}~{{ en.strftime('%H:%M') }}
-            </option>
-            {% else %}
-            <option value="">다른 가능 시간 없음</option>
-            {% endfor %}
-          </select>
-          <button type="submit" {% if not options %}disabled{% endif %}>변경</button>
-        </form>
+        {% if round.status != "확정" %}
+        <div class="event-row-actions">
+          {% if e.status == "요청" and e.id in slot_options_by_event %}
+          {% set options = slot_options_by_event[e.id] %}
+          <form method="post" action="{{ url_for('rounds.reassign_event', round_id=round.id, event_id=e.id) }}"
+                class="reassign-form" data-event-id="{{ e.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="slot" class="reassign-select" {% if not options %}disabled{% endif %}>
+              {% for d, s, en in options %}
+              <option value="{{ d.isoformat() }}|{{ s.strftime('%H:%M') }}|{{ en.strftime('%H:%M') }}"
+                {% if d == e.date and s == e.start_time %}selected{% endif %}>
+                {{ d.isoformat() }} {{ s.strftime('%H:%M') }}~{{ en.strftime('%H:%M') }}
+              </option>
+              {% else %}
+              <option value="">다른 가능 시간 없음</option>
+              {% endfor %}
+            </select>
+            <button type="submit" {% if not options %}disabled{% endif %}>변경</button>
+          </form>
+          {% endif %}
+          <button type="button" class="danger delete-event-btn" data-event-id="{{ e.id }}" data-member-id="{{ e.member_id }}">삭제</button>
+        </div>
         {% endif %}
       </td>
     </tr>

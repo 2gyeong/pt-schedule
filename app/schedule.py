@@ -5,6 +5,7 @@ from flask_login import login_required
 
 from app import db
 from app.context import current_trainer
+from app.holidays import KR_HOLIDAYS
 from app.models import Location, Member, ScheduleEvent
 from app.scheduling import member_available_background, slot_conflicts
 
@@ -55,7 +56,7 @@ def calendar_view():
     trainer = current_trainer()
     members = Member.query.filter_by(trainer_id=trainer.id, is_deleted=False).order_by(Member.name).all()
     locations = Location.query.filter_by(trainer_id=trainer.id).order_by(Location.name).all()
-    return render_template("calendar.html", members=members, locations=locations)
+    return render_template("calendar.html", members=members, locations=locations, holidays=KR_HOLIDAYS)
 
 
 @schedule_bp.route("/api/events", methods=["GET"])

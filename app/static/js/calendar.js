@@ -106,16 +106,40 @@ document.addEventListener("DOMContentLoaded", function () {
   let selectedMemberId = "";
   const AVAILABILITY_SOURCE_ID = "member-availability";
 
+  const holidaysEl = document.getElementById("kr-holidays");
+  const KR_HOLIDAYS = holidaysEl ? JSON.parse(holidaysEl.textContent) : {};
+
+  function toDateStr(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
   const calendarEl = document.getElementById("calendar");
   const calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: "dayGridMonth",
+    initialView: "timeGridWeek",
     headerToolbar: {
       left: "prev,next today",
       center: "title",
-      right: "dayGridMonth,timeGridWeek",
+      right: "timeGridWeek,dayGridMonth",
     },
     slotMinTime: String(scheduleStartHour).padStart(2, "0") + ":00:00",
     slotMaxTime: String(scheduleEndHour).padStart(2, "0") + ":00:00",
+    dayCellClassNames: function (arg) {
+      return KR_HOLIDAYS[toDateStr(arg.date)] ? ["fc-holiday"] : [];
+    },
+    dayCellContent: function (arg) {
+      if (arg.view.type !== "dayGridMonth") return arg.dayNumberText;
+      const name = KR_HOLIDAYS[toDateStr(arg.date)];
+      if (!name) return arg.dayNumberText;
+      return { html: `<span class="fc-daynum">${arg.dayNumberText}</span><span class="fc-holiday-label">${name}</span>` };
+    },
+    dayHeaderClassNames: function (arg) {
+      return KR_HOLIDAYS[toDateStr(arg.date)] ? ["fc-holiday"] : [];
+    },
+    dayHeaderContent: function (arg) {
+      const name = KR_HOLIDAYS[toDateStr(arg.date)];
+      if (!name) return arg.text;
+      return { html: `<span class="fc-daynum">${arg.text}</span><span class="fc-holiday-label">${name}</span>` };
+    },
     events: "/api/events",
     eventClassNames: function (arg) {
       const classes = arg.event.extendedProps.status === "요청" ? ["ev-pending"] : [];

@@ -225,6 +225,34 @@
     submitReassign(form.action, new FormData(form));
   });
 
+  function updateQuotaInput(memberId, quota) {
+    const input = document.querySelector(`input[name="quota_${memberId}"]`);
+    if (input) input.value = quota;
+  }
+
+  function deleteEvent(eventId) {
+    if (!confirm("이 일정을 삭제할까요? 이번 회차 횟수도 1 줄어들어요.")) return;
+    fetch(`/rounds/{{ round.id }}/events/${eventId}/delete`, {
+      method: "POST",
+      headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.ok) { alert(data.message || "삭제하지 못했어요."); return; }
+        if (data.table_html) eventsSection.innerHTML = data.table_html;
+        showReassignFlash(data.message);
+        const calEvent = weekCalendar.getEventById(String(eventId));
+        if (calEvent) calEvent.remove();
+        if (data.member_id != null) updateQuotaInput(data.member_id, data.quota);
+      });
+  }
+
+  eventsSection.addEventListener("click", function (e) {
+    const btn = e.target.closest(".delete-event-btn");
+    if (!btn) return;
+    deleteEvent(btn.dataset.eventId);
+  });
+
   const weekCalendarEl = document.getElementById("round-week-calendar");
   const weekEvents = [
     {% for e in events %}
@@ -256,6 +284,9 @@
     expandRows: true,
     eventDurationEditable: false,
     events: weekEvents,
+    eventClick: function (info) {
+      deleteEvent(info.event.id);
+    },
     eventDragStart: function (info) {
       const memberId = info.event.extendedProps.memberId;
       showReassignFlash("");
