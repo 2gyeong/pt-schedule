@@ -191,4 +191,13 @@ class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
+    is_published = db.Column(db.Boolean, nullable=False, default=True)  # 미게시로 내려두면 회원에게 안 보임
+    publish_at = db.Column(db.DateTime, nullable=True)  # 설정하면 이 시각 전까지는 회원에게 안 보임 (예약 게시)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def is_live(self) -> bool:
+        if not self.is_published:
+            return False
+        if self.publish_at and self.publish_at > datetime.utcnow():
+            return False
+        return True
