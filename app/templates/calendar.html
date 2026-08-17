@@ -126,8 +126,12 @@
 </div>
 <form method="post" action="{{ url_for('rounds.create_round') }}" class="member-form" id="new-round-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>시작일 <input type="date" name="start_date" id="new-round-start" required></label>
-  <label>종료일 <input type="date" name="end_date" id="new-round-end" required></label>
+  <div class="date-range-nav">
+    <button type="button" id="new-round-prev-week" class="copy-link-btn" title="한 주 전으로">◀</button>
+    <label>시작일 <input type="date" name="start_date" id="new-round-start" required></label>
+    <label>종료일 <input type="date" name="end_date" id="new-round-end" required></label>
+    <button type="button" id="new-round-next-week" class="copy-link-btn" title="한 주 뒤로">▶</button>
+  </div>
   <label>PT 시간(분) <input type="number" name="session_minutes" value="50" min="10" step="5" required></label>
   <button type="submit">새 회차 시작</button>
 </form>

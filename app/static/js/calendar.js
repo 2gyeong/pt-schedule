@@ -700,6 +700,21 @@ document.addEventListener("DOMContentLoaded", function () {
       if (nrEnd.value < nrStart.value) nrEnd.value = nrStart.value;
     });
 
+    function shiftIsoDate(iso, days) {
+      const d = new Date(iso + "T00:00:00");
+      d.setDate(d.getDate() + days);
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+    function shiftNewRoundWeek(days) {
+      nrStart.value = shiftIsoDate(nrStart.value, days);
+      nrEnd.min = nrStart.value;
+      nrEnd.value = shiftIsoDate(nrEnd.value, days);
+    }
+    const nrPrevBtn = document.getElementById("new-round-prev-week");
+    const nrNextBtn = document.getElementById("new-round-next-week");
+    if (nrPrevBtn) nrPrevBtn.addEventListener("click", function () { shiftNewRoundWeek(-7); });
+    if (nrNextBtn) nrNextBtn.addEventListener("click", function () { shiftNewRoundWeek(7); });
+
     newRoundForm.addEventListener("submit", function (e) {
       e.preventDefault();
       if (nrEnd.value < nrStart.value) {
