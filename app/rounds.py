@@ -6,6 +6,7 @@ from flask_login import login_required
 from app import db
 from app.context import current_trainer
 from app.models import (
+    Announcement,
     Member,
     RecurringAvailability,
     RecurringTrainerAvailability,
@@ -91,6 +92,8 @@ def create_round():
             session_minutes=int(session_minutes) if session_minutes else 50,
         )
         db.session.add(round_obj)
+        # 새 회차를 시작하면 회원들이 계획하기 탭에서 바로 알아챌 수 있게 공지사항으로 알린다.
+        db.session.add(Announcement(trainer_id=trainer.id, content="다음 예약 계획을 제출해주세요."))
         db.session.commit()
     if _is_ajax():
         return jsonify({"ok": True, "html": _rounds_panel_html(trainer)})
