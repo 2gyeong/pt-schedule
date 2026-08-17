@@ -100,6 +100,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function openCreateModal(dateStr, startTime) {
     modalTitle.textContent = "일정 등록";
+    editOriginalDateTime = null;
     idField.value = "";
     typeField.value = "PT";
     prospectNameField.value = "";
@@ -120,6 +121,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   let selectedMemberId = "";
+  let editOriginalDateTime = null;
   const AVAILABILITY_SOURCE_ID = "member-availability";
   const DRAG_AVAILABILITY_SOURCE_ID = "drag-availability";
 
@@ -127,6 +129,18 @@ document.addEventListener("DOMContentLoaded", function () {
     const flash = document.getElementById("reassign-flash");
     if (!flash) return;
     flash.innerHTML = message ? `<ul class="flash"><li>${message}</li></ul>` : "";
+  }
+
+  let bannerTimeout = null;
+  function showBanner(type, message) {
+    const banner = document.getElementById("pt-banner");
+    if (!banner) return;
+    clearTimeout(bannerTimeout);
+    banner.textContent = message;
+    banner.className = `inline-banner ${type}`;
+    bannerTimeout = setTimeout(function () {
+      banner.className = "inline-banner hidden";
+    }, 4000);
   }
 
   const holidaysEl = document.getElementById("kr-holidays");
@@ -162,8 +176,8 @@ document.addEventListener("DOMContentLoaded", function () {
   function handleUnassignedDrop(info) {
     const el = info.draggedEl;
     const memberId = el.dataset.memberId;
-    const panel = document.getElementById("unassigned-panel");
-    const roundId = panel ? panel.dataset.roundId : null;
+    const roundId = calendarEl.dataset.roundId;
+    clearMemberAvailabilityHighlight();
     if (!roundId) return;
     const dateStr = toDateStr(info.date);
     const startStr = formatEventTime(info.date);
@@ -187,18 +201,105 @@ document.addEventListener("DOMContentLoaded", function () {
         .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
         .then(({ ok, data }) => {
           if (data.needs_confirmation) {
-            if (confirm(data.message)) submit(true);
+            if (confirm(data.message)) {
+              submit(true);
+              return;
+            }
+            showBanner("error", data.message);
             return;
           }
           if (!ok) {
-            alert(data.error || "등록하지 못했어요.");
+            showBanner("error", data.error || "등록하지 못했어요.");
             return;
           }
           calendar.refetchEvents();
           decrementUnassignedBlock(memberId);
+          showBanner("success", "등록되었습니다.");
         });
     }
     submit(false);
+  }
+
+  const UNASSIGNED_AVAILABILITY_SOURCE_ID = "unassigned-drag-availability";
+
+  function clearMemberAvailabilityHighlight() {
+    const src = calendar.getEventSourceById(UNASSIGNED_AVAILABILITY_SOURCE_ID);
+    if (src) src.remove();
+  }
+
+  function showMemberAvailabilityHighlight(memberId) {
+    if (!memberId) return;
+    const view = calendar.view;
+    const start = toDateStr(view.activeStart);
+    const end = toDateStr(view.activeEnd);
+    fetch(`/api/members/${memberId}/available?start=${start}&end=${end}`)
+      .then((r) => r.json())
+      .then((slots) => {
+        clearMemberAvailabilityHighlight();
+        const yellow = slots.map(function (s) {
+          return Object.assign({}, s, { color: "#f0cf5a" });
+        });
+        calendar.addEventSource({ id: UNASSIGNED_AVAILABILITY_SOURCE_ID, events: yellow });
+      });
+  }
+
+  function wireUnassignedDragHighlight() {
+    const list = document.getElementById("unassigned-list");
+    if (!list) return;
+    list.querySelectorAll(".unassigned-block").forEach(function (block) {
+      if (block.dataset.highlightWired) return;
+      block.dataset.highlightWired = "1";
+      block.addEventListener("mousedown", function () {
+        showMemberAvailabilityHighlight(block.dataset.memberId);
+      });
+      block.addEventListener("touchstart", function () {
+        showMemberAvailabilityHighlight(block.dataset.memberId);
+      }, { passive: true });
+    });
+  }
+  document.addEventListener("mouseup", clearMemberAvailabilityHighlight);
+  document.addEventListener("touchend", clearMemberAvailabilityHighlight);
+
+  function ensureUnassignedPanel() {
+    let panel = document.getElementById("unassigned-panel");
+    if (panel) return panel;
+    const layout = document.querySelector(".calendar-layout");
+    if (!layout) return null;
+    panel = document.createElement("aside");
+    panel.id = "unassigned-panel";
+    panel.dataset.roundId = calendarEl.dataset.roundId || "";
+    panel.innerHTML =
+      '<h3>미배정</h3>' +
+      '<p class="hint">이번 회차에 아직 못 넣은 회원이에요. 달력으로 끌어다 놓으면 그 시간에 바로 등록돼요.</p>' +
+      '<div id="unassigned-list"></div>';
+    layout.appendChild(panel);
+    new FullCalendar.Interaction.Draggable(document.getElementById("unassigned-list"), {
+      itemSelector: ".unassigned-block",
+    });
+    return panel;
+  }
+
+  function addToUnassignedPanel(memberId, memberName) {
+    const panel = ensureUnassignedPanel();
+    if (!panel) return;
+    const list = document.getElementById("unassigned-list");
+    let block = list.querySelector(`.unassigned-block[data-member-id="${memberId}"]`);
+    if (block) {
+      const missing = Number(block.dataset.missing) + 1;
+      block.dataset.missing = String(missing);
+      block.querySelector(".unassigned-count").textContent = `${missing}회`;
+    } else {
+      block = document.createElement("div");
+      block.className = "unassigned-block";
+      block.dataset.memberId = memberId;
+      block.dataset.name = memberName;
+      block.dataset.missing = "1";
+      block.innerHTML =
+        `<span class="unassigned-name">${memberName}</span><span class="unassigned-count">1회</span>`;
+      list.appendChild(block);
+    }
+    refreshUnassignedEmptyHint();
+    wireUnassignedDragHighlight();
   }
 
   const calendarEl = document.getElementById("calendar");
@@ -285,9 +386,34 @@ document.addEventListener("DOMContentLoaded", function () {
           calendar.addEventSource({ id: DRAG_AVAILABILITY_SOURCE_ID, events: slots });
         });
     },
-    eventDragStop: function () {
+    eventDragStop: function (info) {
       const src = calendar.getEventSourceById(DRAG_AVAILABILITY_SOURCE_ID);
       if (src) src.remove();
+
+      // 배정된 일정을 달력 밖 "미배정" 패널 위에 놓으면 다시 미배정으로 되돌린다 (양방향 드래그).
+      const panel = document.getElementById("unassigned-panel");
+      if (!panel || !info.event.extendedProps.round_id || !info.jsEvent) return;
+      const rect = panel.getBoundingClientRect();
+      const x = info.jsEvent.clientX;
+      const y = info.jsEvent.clientY;
+      const overPanel = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+      if (!overPanel) return;
+
+      const memberId = info.event.extendedProps.member_id;
+      const memberName = info.event.extendedProps.member_name;
+      if (!confirm(`${memberName}님을 다시 미배정으로 되돌릴까요?`)) return;
+      fetch(`/api/events/${info.event.id}`, {
+        method: "DELETE",
+        headers: { "X-CSRFToken": csrfToken },
+      }).then((res) => {
+        if (res.ok) {
+          info.event.remove();
+          addToUnassignedPanel(memberId, memberName);
+          showBanner("success", "미배정으로 옮겼습니다.");
+        } else {
+          showBanner("error", "되돌리지 못했어요.");
+        }
+      });
     },
     eventDrop: function (info) {
       const start = info.event.start;
@@ -304,20 +430,38 @@ document.addEventListener("DOMContentLoaded", function () {
           info.revert();
           return;
         }
-        fetch(`/api/events/${info.event.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
-          body: JSON.stringify({
-            date: toDate(start),
-            start_time: toTime(start),
-            end_time: toTime(end),
-          }),
-        }).then((res) => {
-          if (!res.ok) {
-            res.json().then((data) => alert(data.error || "변경하지 못했어요."));
-            info.revert();
-          }
-        });
+        function submitMove(confirmed) {
+          fetch(`/api/events/${info.event.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+            body: JSON.stringify({
+              date: toDate(start),
+              start_time: toTime(start),
+              end_time: toTime(end),
+              check_availability: true,
+              confirmed_outside_availability: confirmed,
+            }),
+          })
+            .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+            .then(({ ok, data }) => {
+              if (data.needs_confirmation) {
+                if (confirm(data.message)) {
+                  submitMove(true);
+                  return;
+                }
+                showBanner("error", data.message);
+                info.revert();
+                return;
+              }
+              if (!ok) {
+                showBanner("error", data.error || "변경하지 못했어요.");
+                info.revert();
+                return;
+              }
+              showBanner("success", "저장되었습니다.");
+            });
+        }
+        submitMove(false);
         return;
       }
 
@@ -356,6 +500,7 @@ document.addEventListener("DOMContentLoaded", function () {
       dateField.value = event.startStr.slice(0, 10);
       startField.value = event.startStr.slice(11, 16);
       endField.value = addMinutes(startField.value, durationForType());
+      editOriginalDateTime = { date: dateField.value, start: startField.value };
       statusField.value = event.extendedProps.status;
       memoField.value = event.extendedProps.memo;
       document.querySelectorAll(".time-cube").forEach(function (cube) {
@@ -380,24 +525,41 @@ document.addEventListener("DOMContentLoaded", function () {
   calendar.render();
   window.ptCalendar = calendar;
 
+  function refreshUnassignedEmptyHint() {
+    const panel = document.getElementById("unassigned-panel");
+    const list = document.getElementById("unassigned-list");
+    if (!panel || !list) return;
+    let hint = document.getElementById("unassigned-empty-hint");
+    if (!list.children.length) {
+      if (!hint) {
+        hint = document.createElement("p");
+        hint.className = "hint";
+        hint.id = "unassigned-empty-hint";
+        hint.textContent = "모두 배정됐어요.";
+        panel.appendChild(hint);
+      }
+    } else if (hint) {
+      hint.remove();
+    }
+  }
+
   function decrementUnassignedBlock(memberId) {
     const block = document.querySelector(`.unassigned-block[data-member-id="${memberId}"]`);
     if (!block) return;
     const remaining = Number(block.dataset.missing) - 1;
     if (remaining <= 0) {
       block.remove();
-      const list = document.getElementById("unassigned-list");
-      const panel = document.getElementById("unassigned-panel");
-      if (list && panel && !list.children.length) panel.remove();
     } else {
       block.dataset.missing = String(remaining);
       block.querySelector(".unassigned-count").textContent = `${remaining}회`;
     }
+    refreshUnassignedEmptyHint();
   }
 
   const unassignedListEl = document.getElementById("unassigned-list");
   if (unassignedListEl) {
-    new FullCalendar.Draggable(unassignedListEl, { itemSelector: ".unassigned-block" });
+    new FullCalendar.Interaction.Draggable(unassignedListEl, { itemSelector: ".unassigned-block" });
+    wireUnassignedDragHighlight();
   }
 
   document.getElementById("member-filter").addEventListener("change", function () {
@@ -417,36 +579,58 @@ document.addEventListener("DOMContentLoaded", function () {
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
-    const payload = {
-      member_id: memberField.value,
-      prospect_name: prospectNameField.value,
-      location_id: locationField.value || null,
-      date: dateField.value,
-      start_time: startField.value,
-      end_time: endField.value,
-      status: statusField.value,
-      memo: memoField.value,
-      event_type: typeField.value,
-    };
     const id = idField.value;
     const url = id ? `/api/events/${id}` : "/api/events";
     const method = id ? "PUT" : "POST";
+    // 날짜/시간을 실제로 바꿀 때만(또는 새로 만들 때만) 회원 가능 시간을 확인한다.
+    // 메모/상태 등 다른 값만 바꾸는 저장까지 매번 되물으면 번거로우니 제외.
+    const timeChanged =
+      !editOriginalDateTime ||
+      dateField.value !== editOriginalDateTime.date ||
+      startField.value !== editOriginalDateTime.start;
 
-    fetch(url, {
-      method: method,
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrfToken,
-      },
-      body: JSON.stringify(payload),
-    }).then((res) => {
-      if (res.ok) {
-        calendar.refetchEvents();
-        closeModal();
-      } else {
-        res.json().then((data) => alert(data.error || "저장하지 못했어요. 다시 시도해주세요."));
-      }
-    });
+    function submitForm(confirmed) {
+      const payload = {
+        member_id: memberField.value,
+        prospect_name: prospectNameField.value,
+        location_id: locationField.value || null,
+        date: dateField.value,
+        start_time: startField.value,
+        end_time: endField.value,
+        status: statusField.value,
+        memo: memoField.value,
+        event_type: typeField.value,
+        check_availability: timeChanged,
+        confirmed_outside_availability: confirmed,
+      };
+      fetch(url, {
+        method: method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken,
+        },
+        body: JSON.stringify(payload),
+      })
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (data.needs_confirmation) {
+            if (confirm(data.message)) {
+              submitForm(true);
+              return;
+            }
+            showBanner("error", data.message);
+            return;
+          }
+          if (!ok) {
+            showBanner("error", data.error || "저장하지 못했어요. 다시 시도해주세요.");
+            return;
+          }
+          calendar.refetchEvents();
+          closeModal();
+          showBanner("success", id ? "저장되었습니다." : "등록되었습니다.");
+        });
+    }
+    submitForm(false);
   });
 
   deleteBtn.addEventListener("click", function () {

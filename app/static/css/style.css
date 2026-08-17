@@ -139,6 +139,54 @@ h1 {
   margin-bottom: 18px;
 }
 .page-head-row h1 { margin: 0; }
+.page-head-row .page-head-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.inline-banner {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 480px;
+}
+.inline-banner.success { background: var(--success-soft); color: #3f7d5c; }
+.inline-banner.error { background: var(--danger-soft); color: #a85757; }
+.inline-banner.hidden { display: none; }
+
+.mini-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 18px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.mini-tab-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  padding: 9px 18px;
+  box-shadow: none;
+}
+.mini-tab-btn:hover { background: var(--surface-alt); color: var(--text); }
+.mini-tab-btn.active {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-bottom-color: var(--surface);
+  margin-bottom: -1px;
+}
+.mini-tab-panel.hidden { display: none; }
+
+.fc-current-week {
+  background: var(--accent-soft) !important;
+}
 .inline-select {
   display: flex;
   align-items: center;
@@ -538,7 +586,7 @@ th.fc-holiday .fc-daynum { display: block; }
 
 .fc-event.ev-pending {
   border-style: dashed !important;
-  opacity: 0.8;
+  opacity: 0.5;
 }
 
 .fc-event.ev-dimmed {

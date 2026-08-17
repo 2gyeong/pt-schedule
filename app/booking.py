@@ -16,7 +16,7 @@ from app.models import (
     SchedulingRound,
     Trainer,
 )
-from app.scheduling import trainer_open_background
+from app.scheduling import display_hour_range, trainer_open_background
 
 booking_bp = Blueprint("booking", __name__)
 
@@ -52,68 +52,33 @@ def book_page(token):
             is not None
         )
 
-    confirmed_events = (
-        ScheduleEvent.query.filter_by(member_id=member.id, status="확정")
-        .order_by(ScheduleEvent.date, ScheduleEvent.start_time)
-        .all()
-    )
-    pending_change_request_by_event = {
-        r.event_id: r.id
-        for r in ChangeRequest.query.filter_by(member_id=member.id, status="대기").all()
-    }
     announcements = (
         Announcement.query.filter_by(trainer_id=member.trainer_id)
         .order_by(Announcement.created_at.desc())
         .all()
     )
+    # 취소된 메시지는 회원 화면에는 아예 안 보이게 하고(DB에는 그대로 남김)
     messages = (
-        MemberMessage.query.filter_by(member_id=member.id)
+        MemberMessage.query.filter_by(member_id=member.id, status="전송됨")
         .order_by(MemberMessage.created_at.desc())
         .all()
     )
 
+    display_start_hour, display_end_hour = display_hour_range(trainer)
+
     return render_template(
         "booking.html",
         member=member,
+        trainer=trainer,
         locations=locations,
         recurring_blocks=recurring_blocks,
         trainer_blocks=trainer_blocks,
         upcoming_round=upcoming_round,
         already_submitted=already_submitted,
-        confirmed_events=confirmed_events,
-        pending_change_request_by_event=pending_change_request_by_event,
         announcements=announcements,
         messages=messages,
-        schedule_start_hour=trainer.schedule_start_hour,
-        schedule_end_hour=trainer.schedule_end_hour,
-    )
-
-
-@booking_bp.route("/book/<token>/confirmed", methods=["GET"])
-def confirmed_events_api(token):
-    member = Member.query.filter_by(booking_token=token).first_or_404()
-    events = (
-        ScheduleEvent.query.filter_by(member_id=member.id, status="확정")
-        .order_by(ScheduleEvent.date, ScheduleEvent.start_time)
-        .all()
-    )
-    pending_change_request_by_event = {
-        r.event_id: r.id
-        for r in ChangeRequest.query.filter_by(member_id=member.id, status="대기").all()
-    }
-    return jsonify(
-        [
-            {
-                "id": e.id,
-                "date": e.date.isoformat(),
-                "start_time": e.start_time.strftime("%H:%M"),
-                "end_time": e.end_time.strftime("%H:%M"),
-                "location_name": e.location.name if e.location else None,
-                "change_pending": e.id in pending_change_request_by_event,
-                "change_request_id": pending_change_request_by_event.get(e.id),
-            }
-            for e in events
-        ]
+        schedule_start_hour=display_start_hour,
+        schedule_end_hour=display_end_hour,
     )
 
 
@@ -134,11 +99,18 @@ def create_change_request(token, event_id):
     if req_end <= req_start:
         abort(400, description="종료 시간이 시작 시간보다 늦어야 합니다.")
 
+    req_location_id = data.get("location_id") or None
+    if req_location_id is not None:
+        loc = Location.query.filter_by(id=req_location_id, trainer_id=member.trainer_id).first()
+        if not loc:
+            abort(400, description="올바르지 않은 지점입니다.")
+
     existing = ChangeRequest.query.filter_by(event_id=event.id, status="대기").first()
     if existing:
         existing.requested_date = req_date
         existing.requested_start_time = req_start
         existing.requested_end_time = req_end
+        existing.requested_location_id = req_location_id
         existing.memo = data.get("memo") or None
         existing.created_at = datetime.utcnow()
     else:
@@ -150,6 +122,7 @@ def create_change_request(token, event_id):
                 requested_date=req_date,
                 requested_start_time=req_start,
                 requested_end_time=req_end,
+                requested_location_id=req_location_id,
                 memo=data.get("memo") or None,
             )
         )
@@ -169,16 +142,6 @@ def cancel_change_request(token, change_request_id):
     return jsonify({"ok": True}), 200
 
 
-@booking_bp.route("/book/<token>/messages", methods=["POST"])
-def send_message(token):
-    member = Member.query.filter_by(booking_token=token).first_or_404()
-    content = request.form.get("content", "").strip()
-    if content:
-        db.session.add(MemberMessage(trainer_id=member.trainer_id, member_id=member.id, content=content))
-        db.session.commit()
-    return redirect(url_for("booking.book_page", token=token))
-
-
 @booking_bp.route("/book/<token>/messages/<int:message_id>/cancel", methods=["POST"])
 def cancel_message(token, message_id):
     """회원이 자기가 보낸 메시지를 취소한다. 기록은 지우지 않고 상태만 취소됨으로 바꾼다."""
@@ -191,10 +154,14 @@ def cancel_message(token, message_id):
 
 @booking_bp.route("/book/<token>/my-events", methods=["GET"])
 def my_events(token):
-    """이 회원 본인의 확정된 예약만 (다른 회원 예약은 절대 섞이지 않음). 달력에 실제 제목을 달아 보여주고,
-    클릭하면 바로 수정 요청으로 이어지는 용도."""
+    """이 회원 본인의 예약(확정 + 승인 대기중인 요청). 다른 회원 예약은 절대 섞이지 않음. 달력에
+    실제 제목을 달아 보여주고, 드래그하거나 클릭하면 수정 요청으로 이어지는 용도. 확정되지 않은
+    건은 프론트에서 불투명도를 낮춰 구분해서 보여준다."""
     member = Member.query.filter_by(booking_token=token).first_or_404()
-    query = ScheduleEvent.query.filter_by(status="확정", member_id=member.id)
+    query = ScheduleEvent.query.filter(
+        ScheduleEvent.member_id == member.id,
+        ScheduleEvent.status.in_(["확정", "요청"]),
+    )
     start = request.args.get("start")
     end = request.args.get("end")
     if start:
@@ -216,9 +183,11 @@ def my_events(token):
                 "borderColor": "#37352f",
                 "extendedProps": {
                     "mine": True,
+                    "confirmed": e.status == "확정",
                     "date": e.date.isoformat(),
                     "start_time": e.start_time.strftime("%H:%M"),
                     "end_time": e.end_time.strftime("%H:%M"),
+                    "location_id": e.location_id,
                 },
             }
         )
@@ -236,11 +205,20 @@ def _mark_submitted(member):
 
 @booking_bp.route("/book/<token>/recurring", methods=["POST"])
 def save_recurring(token):
+    """'계획하기' 저장. 이번 회차에 처음 제출하는 게 아니라 이미 제출된 걸 다시 수정하는 거면
+    선생님이 알아챌 수 있게 자동으로 알림 메시지를 남긴다. 회원이 직접 메시지를 함께 적어 보내면
+    그 메시지만 남기고, 별도로 적지 않았을 때만 자동 알림을 남긴다(중복 알림 방지)."""
     member = Member.query.filter_by(booking_token=token).first_or_404()
     data = request.get_json()
     blocks = data.get("blocks") if data else None
     if blocks is None:
         abort(400)
+
+    round_obj = _active_round(member.trainer_id)
+    was_submitted = bool(
+        round_obj
+        and RoundSubmission.query.filter_by(round_id=round_obj.id, member_id=member.id).first()
+    )
 
     trainer_allowed = {
         (t.weekday, t.start_time.hour)
@@ -262,6 +240,19 @@ def save_recurring(token):
             )
         )
         saved += 1
+
+    message_text = (data.get("message") or "").strip()
+    if message_text:
+        db.session.add(MemberMessage(trainer_id=member.trainer_id, member_id=member.id, content=message_text))
+    elif was_submitted:
+        db.session.add(
+            MemberMessage(
+                trainer_id=member.trainer_id,
+                member_id=member.id,
+                content=f"{member.name}님이 계획하기 내용을 수정했어요.",
+            )
+        )
+
     _mark_submitted(member)
     db.session.commit()
     return jsonify({"saved": saved}), 201

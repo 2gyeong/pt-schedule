@@ -91,6 +91,7 @@ function initBlockGrid(container, options) {
   actions.className = "block-grid-actions";
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
+  if (options.danger) saveBtn.classList.add("danger");
   saveBtn.textContent = options.saveLabel || "저장";
   const status = document.createElement("span");
   status.className = "block-grid-status";
@@ -103,13 +104,15 @@ function initBlockGrid(container, options) {
     grid.querySelectorAll(".block-cell.selected").forEach(function (cell) {
       blocks.push({ weekday: Number(cell.dataset.weekday), hour: Number(cell.dataset.hour) });
     });
+    const payload = { blocks: blocks };
+    if (options.messageField) payload.message = options.messageField.value;
     fetch(options.saveUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-CSRFToken": options.csrfToken,
       },
-      body: JSON.stringify({ blocks: blocks }),
+      body: JSON.stringify(payload),
     }).then(function (res) {
       if (res.ok && options.reloadOnSave) {
         alert("완료되었습니다.");

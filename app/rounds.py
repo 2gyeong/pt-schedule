@@ -141,10 +141,15 @@ def round_panel_context(round_obj, trainer):
 
 def unassigned_members_for_round(round_obj):
     """이번 회차에서 희망 횟수(RoundQuota)보다 실제 배정된 건수가 적은 회원 목록.
-    달력 오른쪽 '미배정' 목록에 드래그 가능한 블록으로 보여주는 용도."""
+    달력 오른쪽 '미배정' 목록에 드래그 가능한 블록으로 보여주는 용도.
+    이번 회차를 제출(RoundSubmission)하지 않은 회원은 자동 생성(generate_schedule)에서도
+    배정 대상에서 제외되므로, 여기서도 같은 기준으로 제외해 드래그로 강제 배정되지 않게 한다."""
     quotas = RoundQuota.query.filter_by(round_id=round_obj.id).all()
     if not quotas:
         return []
+    submitted_member_ids = {
+        s.member_id for s in RoundSubmission.query.filter_by(round_id=round_obj.id).all()
+    }
     assigned_counts = dict(
         db.session.query(ScheduleEvent.member_id, db.func.count(ScheduleEvent.id))
         .filter(
@@ -156,6 +161,8 @@ def unassigned_members_for_round(round_obj):
     )
     result = []
     for q in quotas:
+        if q.member_id not in submitted_member_ids:
+            continue
         missing = q.count - assigned_counts.get(q.member_id, 0)
         if missing > 0:
             result.append({"member_id": q.member_id, "name": q.member.name, "missing": missing})

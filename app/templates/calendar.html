@@ -11,7 +11,10 @@
 {% block flash %}{% endblock %}
 {% block content %}
 <div class="page-head-row">
-  <h1>PT 일정</h1>
+  <div class="page-head-left">
+    <h1>PT 일정</h1>
+    <span id="pt-banner" class="inline-banner hidden"></span>
+  </div>
   <label class="inline-select">회원 보기
     <select id="member-filter">
       <option value="">전체보기</option>
@@ -33,11 +36,11 @@
   <button type="button" id="new-event-btn">+ 새 일정 등록</button>
 </div>
 <div class="calendar-layout">
-  <div id="calendar" data-start-hour="{{ display_start_hour }}" data-end-hour="{{ display_end_hour }}" data-round-start="{{ active_round.start_date.isoformat() if active_round else '' }}"></div>
-  {% if unassigned_members %}
+  <div id="calendar" data-start-hour="{{ display_start_hour }}" data-end-hour="{{ display_end_hour }}" data-round-start="{{ active_round.start_date.isoformat() if active_round else '' }}" data-round-id="{{ active_round.id if active_round else '' }}"></div>
+  {% if active_round %}
   <aside id="unassigned-panel" data-round-id="{{ active_round.id }}">
     <h3>미배정</h3>
-    <p class="hint">이번 회차에 아직 못 넣은 회원이에요. 달력으로 끌어다 놓으면 그 시간에 바로 등록돼요.</p>
+    <p class="hint">이번 회차에 아직 못 넣은 회원이에요. 달력으로 끌어다 놓으면 그 시간에 바로 등록되고, 반대로 배정된 일정을 여기로 끌어오면 다시 미배정으로 돌아와요.</p>
     <div id="unassigned-list">
       {% for m in unassigned_members %}
       <div class="unassigned-block" data-member-id="{{ m.member_id }}" data-name="{{ m.name }}" data-missing="{{ m.missing }}">
@@ -46,6 +49,9 @@
       </div>
       {% endfor %}
     </div>
+    {% if not unassigned_members %}
+    <p class="hint" id="unassigned-empty-hint">모두 배정됐어요.</p>
+    {% endif %}
   </aside>
   {% endif %}
 </div>

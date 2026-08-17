@@ -185,12 +185,14 @@ class ChangeRequest(db.Model):
     requested_date = db.Column(db.Date, nullable=False)
     requested_start_time = db.Column(db.Time, nullable=False)
     requested_end_time = db.Column(db.Time, nullable=False)
+    requested_location_id = db.Column(db.Integer, db.ForeignKey("location.id"), nullable=True)
     memo = db.Column(db.String(255))
-    status = db.Column(db.String(20), default="대기")  # 대기 / 수락됨 / 거절됨
+    status = db.Column(db.String(20), default="대기")  # 대기 / 수락됨 / 거절됨 / 취소됨
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     event = db.relationship("ScheduleEvent")
     member = db.relationship("Member")
+    requested_location = db.relationship("Location")
 
 
 class Announcement(db.Model):

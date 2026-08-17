@@ -8,20 +8,9 @@ from app.context import current_trainer
 from app.holidays import KR_HOLIDAYS
 from app.models import Location, Member, RecurringAvailability, RecurringTrainerAvailability, ScheduleEvent
 from app.rounds import active_round_for, round_panel_context, unassigned_members_for_round
-from app.scheduling import member_available_background, slot_conflicts
+from app.scheduling import display_hour_range, member_available_background, slot_conflicts
 
 schedule_bp = Blueprint("schedule", __name__)
-
-
-def _display_hour_range(trainer):
-    """달력에 표시할 시간대. 선생님이 지정해둔 표시 범위가 실제 반복 가능 시간보다 좁으면
-    자동으로 넓혀서, 생성된 일정이 화면 밖으로 밀려 안 보이는 일이 없게 한다."""
-    start_hour = trainer.schedule_start_hour
-    end_hour = trainer.schedule_end_hour
-    for t in RecurringTrainerAvailability.query.filter_by(trainer_id=trainer.id).all():
-        start_hour = min(start_hour, t.start_time.hour)
-        end_hour = max(end_hour, t.end_time.hour + (1 if t.end_time.minute else 0))
-    return start_hour, min(end_hour, 24)
 
 
 def _within_member_availability(member, event_date, start_time, end_time) -> bool:
@@ -89,7 +78,7 @@ def calendar_view():
     active_round = active_round_for(trainer)
     round_context = round_panel_context(active_round, trainer) if active_round else None
     unassigned_members = unassigned_members_for_round(active_round) if active_round else []
-    display_start_hour, display_end_hour = _display_hour_range(trainer)
+    display_start_hour, display_end_hour = display_hour_range(trainer)
 
     return render_template(
         "calendar.html",
@@ -154,13 +143,13 @@ def create_event():
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
 
     round_id = data.get("round_id") if event_type == "PT" else None
-    # 미배정 목록에서 달력으로 끌어와 강제 등록하는 경우: 선생님은 마스터 권한으로 회원이
-    # 설정한 시간이 아니어도 등록할 수 있지만, 먼저 그렇다는 걸 알려주고 확인을 받는다.
-    if round_id and not data.get("confirmed_outside_availability"):
+    # 선생님은 마스터 권한으로 회원이 설정한 시간이 아니어도 등록할 수 있지만(미배정 드래그든
+    # 수동 등록이든 상관없이), 먼저 그렇다는 걸 알려주고 확인을 받는다.
+    if event_type == "PT" and not data.get("confirmed_outside_availability"):
         if not _within_member_availability(member, event_date, start_time, end_time):
             return jsonify({
                 "needs_confirmation": True,
-                "message": f"이 시간은 {member.name}님이 설정한 가능 시간이 아니에요. 그래도 등록할까요?",
+                "message": "회원이 가능한 시간이 아닙니다. 그래도 변경하시겠습니까?",
             })
 
     event = ScheduleEvent(
@@ -202,6 +191,18 @@ def update_event(event_id):
     )
     if slot_conflicts(trainer.id, new_date, new_start, new_end, new_location, exclude_event_id=event.id):
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
+
+    if (
+        event.event_type == "PT"
+        and data.get("check_availability")
+        and not data.get("confirmed_outside_availability")
+        and event.member
+        and not _within_member_availability(event.member, new_date, new_start, new_end)
+    ):
+        return jsonify({
+            "needs_confirmation": True,
+            "message": "회원이 가능한 시간이 아닙니다. 그래도 변경하시겠습니까?",
+        })
 
     new_event_type = data["event_type"] if data.get("event_type") in ("PT", "상담") else event.event_type
     if new_event_type == "상담":

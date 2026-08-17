@@ -18,6 +18,21 @@ def _to_dt(d: date, t: time) -> datetime:
     return datetime.combine(d, t)
 
 
+def display_hour_range(trainer):
+    """달력/예약 화면에 표시할 시간대. 선생님이 지정해둔 표시 범위가 실제 반복 가능 시간이나
+    (마스터 권한으로 그 범위 밖에 등록된) 실제 일정보다 좁으면 자동으로 넓혀서, 일정이 화면
+    밖으로 밀려 안 보이는 일이 없게 한다."""
+    start_hour = trainer.schedule_start_hour
+    end_hour = trainer.schedule_end_hour
+    for t in RecurringTrainerAvailability.query.filter_by(trainer_id=trainer.id).all():
+        start_hour = min(start_hour, t.start_time.hour)
+        end_hour = max(end_hour, t.end_time.hour + (1 if t.end_time.minute else 0))
+    for e in ScheduleEvent.query.filter_by(trainer_id=trainer.id).filter(ScheduleEvent.status != "취소").all():
+        start_hour = min(start_hour, e.start_time.hour)
+        end_hour = max(end_hour, e.end_time.hour + (1 if e.end_time.minute else 0))
+    return start_hour, min(end_hour, 24)
+
+
 def _overlaps(start_a, end_a, start_b, end_b) -> bool:
     return start_a < end_b and start_b < end_a
 

@@ -70,12 +70,13 @@ def accept_change_request(request_id):
         flash("이 요청은 시간 값이 올바르지 않아 수락할 수 없어요. 거절 후 회원에게 다시 요청해달라고 안내해주세요.")
         return redirect(url_for("change_requests.list_change_requests"))
 
+    new_location = req.requested_location if req.requested_location_id else event.location
     conflict = slot_conflicts(
         trainer.id,
         req.requested_date,
         req.requested_start_time,
         req.requested_end_time,
-        event.location,
+        new_location,
         exclude_event_id=event.id,
     )
     if conflict:
@@ -85,6 +86,7 @@ def accept_change_request(request_id):
     event.date = req.requested_date
     event.start_time = req.requested_start_time
     event.end_time = req.requested_end_time
+    event.location_id = new_location.id if new_location else None
     req.status = "수락됨"
     db.session.commit()
     flash(f"{req.member.name}님의 변경 요청을 수락했습니다.")

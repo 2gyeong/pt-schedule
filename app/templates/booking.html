@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/ko.global.min.js"></script>
 {% endblock %}
 {% block content %}
-<h1>{{ member.name }}님</h1>
+<h1>{{ member.name }} 님, 안녕하세요. 💪</h1>
 
 {% if announcements %}
 <div class="callout" style="margin-bottom:22px;">
@@ -22,95 +22,74 @@
 </div>
 {% endif %}
 
-<div id="confirmed-events-section" {% if not confirmed_events %}class="hidden"{% endif %}>
-  <h2>확정된 예약</h2>
-  <ul class="submission-list" id="confirmed-events-list">
-    {% for e in confirmed_events %}
-    <li>
-      <span>{{ e.date.isoformat() }} {{ e.start_time.strftime("%H:%M") }}~{{ e.end_time.strftime("%H:%M") }}
-        {% if e.location %} @ {{ e.location.name }}{% endif %}</span>
-      {% if e.id in pending_change_request_by_event %}
-      <span class="pending">수정 요청 대기중</span>
-      <button type="button" class="copy-link-btn cancel-change-request-btn" data-request-id="{{ pending_change_request_by_event[e.id] }}">요청 취소</button>
+<div class="mini-tabs">
+  <button type="button" class="mini-tab-btn active" data-tab="calendar">캘린더</button>
+  <button type="button" class="mini-tab-btn" data-tab="plan">계획하기</button>
+</div>
+
+<div id="tab-calendar" class="mini-tab-panel">
+  <p class="hint">내 예약을 드래그하거나 클릭하면 변경을 요청할 수 있어요. 확정되지 않은(옅은) 예약은 아직 선생님 승인 대기중이에요.</p>
+  <div class="legend">
+    <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>{{ trainer.name }} 선생님 가능 시간</span>
+    <span class="legend-item"><span class="dot" style="background:#bbb"></span>이미 예약된 시간</span>
+  </div>
+  <p id="change-mode-hint" class="callout hidden"></p>
+  <div id="calendar" data-token="{{ member.booking_token }}"
+       data-start-hour="{{ schedule_start_hour }}" data-end-hour="{{ schedule_end_hour }}"></div>
+</div>
+
+<div id="tab-plan" class="mini-tab-panel hidden">
+  {% if upcoming_round %}
+  <div class="status-card">
+    <div class="status-card-top">
+      <span class="status-card-title">
+        {{ upcoming_round.start_date.month }}월 {{ ((upcoming_round.start_date.day - 1) // 7) + 1 }}주차
+        ({{ upcoming_round.start_date.strftime('%y.%m.%d') }}~{{ upcoming_round.end_date.strftime('%y.%m.%d') }}) 예약 페이지입니다
+      </span>
+      {% if already_submitted %}
+      <span class="status-badge status-제출완료">제출완료</span>
       {% else %}
-      <button type="button" class="copy-link-btn change-request-btn"
-              data-event-id="{{ e.id }}" data-date="{{ e.date.isoformat() }}"
-              data-start="{{ e.start_time.strftime('%H:%M') }}" data-end="{{ e.end_time.strftime('%H:%M') }}">
-        수정 요청
-      </button>
+      <span class="status-badge status-미제출">미제출</span>
       {% endif %}
+    </div>
+    <p class="status-card-desc">
+      {% if already_submitted %}
+      이번 회차에 제출 완료했어요. 시간을 바꾸고 다시 저장하면 재제출되고, 선생님께 알림이 가요.
+      {% else %}
+      아직 이번 회차에 제출하지 않았어요. 아래 시간을 선택(또는 확인)하고 제출 버튼을 눌러야 선생님이 계산할 때 포함됩니다.
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+
+  {% if not trainer_blocks %}
+  <p class="hint">아직 선생님이 가능 시간을 설정하지 않아서 선택할 수 있는 칸이 없어요. 선생님께 문의해주세요.</p>
+  {% else %}
+  <p class="hint">
+    매주 반복해서 PT 받을 수 있는 시간을 블록으로 선택해주세요. 클릭하거나 드래그해서 여러 칸을 한 번에 선택할 수 있어요.
+    회색으로 흐린 칸은 선생님이 안 되는 시간이라 선택할 수 없어요.
+  </p>
+  {% endif %}
+  <div id="availability-grid"></div>
+
+  {% if upcoming_round %}
+  <label class="hint" style="display:block; margin-top:18px;" for="plan-message">선생님께 메시지 (선택)</label>
+  <textarea id="plan-message" rows="3" style="width:100%; max-width:480px; font-family:inherit;"
+            placeholder="몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 적어주세요. 제출/수정할 때 함께 보내져요."></textarea>
+  {% endif %}
+
+  {% if messages %}
+  <h3 style="margin-top:24px;">보낸 메시지</h3>
+  <ul class="submission-list" style="max-width:480px;">
+    {% for msg in messages %}
+    <li>
+      <span style="white-space:pre-wrap;">{{ msg.content }}</span>
+      <button type="button" class="copy-link-btn cancel-message-btn" data-message-id="{{ msg.id }}">취소</button>
     </li>
     {% endfor %}
   </ul>
+  {% endif %}
 </div>
-
-<h2>내 고정 가능 시간</h2>
-
-{% if upcoming_round %}
-<div class="status-card">
-  <div class="status-card-top">
-    <span class="status-card-title">
-      {{ upcoming_round.start_date.month }}월 {{ ((upcoming_round.start_date.day - 1) // 7) + 1 }}주차
-      ({{ upcoming_round.start_date.strftime('%y.%m.%d') }}~{{ upcoming_round.end_date.strftime('%y.%m.%d') }}) 예약 페이지입니다
-    </span>
-    {% if already_submitted %}
-    <span class="status-badge status-제출완료">제출완료</span>
-    {% else %}
-    <span class="status-badge status-미제출">미제출</span>
-    {% endif %}
-  </div>
-  <p class="status-card-desc">
-    {% if already_submitted %}
-    이번 회차에 제출 완료했어요. 시간을 바꾸고 다시 저장하면 재제출됩니다.
-    {% else %}
-    아직 이번 회차에 제출하지 않았어요. 아래 시간을 선택(또는 확인)하고 저장/제출 버튼을 눌러야 선생님이 계산할 때 포함됩니다.
-    {% endif %}
-  </p>
-</div>
-{% endif %}
-
-{% if not trainer_blocks %}
-<p class="hint">아직 선생님이 가능 시간을 설정하지 않아서 선택할 수 있는 칸이 없어요. 선생님께 문의해주세요.</p>
-{% else %}
-<p class="hint">
-  매주 반복해서 PT 받을 수 있는 시간을 블록으로 선택해주세요. 클릭하거나 드래그해서 여러 칸을 한 번에 선택할 수 있어요.
-  회색으로 흐린 칸은 선생님이 안 되는 시간이라 선택할 수 없어요.
-</p>
-{% endif %}
-<div id="availability-grid"></div>
-
-<h2>선생님께 메시지 보내기</h2>
-<p class="hint">몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 보내주세요. 선생님께 알림이 가요.</p>
-<form method="post" action="{{ url_for('booking.send_message', token=member.booking_token) }}" class="member-form">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <textarea name="content" rows="3" required style="width:100%; max-width:480px; font-family:inherit;" placeholder="몸 상태, 요청사항 등 선생님께 따로 전달하고 싶은 내용을 적어주세요."></textarea>
-  <button type="submit">보내기</button>
-</form>
-{% if messages %}
-<ul class="submission-list" style="max-width:480px;">
-  {% for msg in messages %}
-  <li>
-    <span style="white-space:pre-wrap; {% if msg.status == '취소됨' %}text-decoration:line-through; color:var(--text-muted);{% endif %}">
-      {{ msg.content }}
-    </span>
-    {% if msg.status == "전송됨" %}
-    <button type="button" class="copy-link-btn cancel-message-btn" data-message-id="{{ msg.id }}">취소</button>
-    {% else %}
-    <span class="pending">취소됨</span>
-    {% endif %}
-  </li>
-  {% endfor %}
-</ul>
-{% endif %}
-
-<p class="hint">위 "확정된 예약" 목록에서 "수정 요청" 버튼을 누르면, 아래 달력에서 원하는 날짜를 클릭해 새 시간을 요청할 수 있어요.</p>
-<div class="legend">
-  <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선생님 가능 시간</span>
-  <span class="legend-item"><span class="dot" style="background:#bbb"></span>이미 예약된 시간</span>
-</div>
-<p id="change-mode-hint" class="callout hidden"></p>
-<div id="calendar" data-token="{{ member.booking_token }}"
-     data-start-hour="{{ schedule_start_hour }}" data-end-hour="{{ schedule_end_hour }}"></div>
 
 <div id="request-modal" class="modal hidden">
   <div class="modal-box">
@@ -119,6 +98,14 @@
       <label>새 날짜 <input type="date" id="req-date" required></label>
       <label>새 시작 시간 <input type="time" id="req-start" required></label>
       <p class="hint" id="req-end-preview"></p>
+      <label>지점
+        <select id="req-location">
+          <option value="">기존 지점 유지</option>
+          {% for location in locations %}
+          <option value="{{ location.id }}">{{ location.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <label>메모 <input type="text" id="req-memo" placeholder="선택사항"></label>
       <div class="modal-actions">
         <button type="submit">요청 보내기</button>
@@ -130,6 +117,25 @@
 </div>
 {% endblock %}
 {% block scripts %}
+<script>
+  (function () {
+    const tabBtns = document.querySelectorAll(".mini-tab-btn");
+    const panels = {
+      calendar: document.getElementById("tab-calendar"),
+      plan: document.getElementById("tab-plan"),
+    };
+    tabBtns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        tabBtns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        Object.keys(panels).forEach((key) => panels[key].classList.toggle("hidden", key !== btn.dataset.tab));
+        if (btn.dataset.tab === "calendar" && window.ptBookingCalendar) {
+          window.ptBookingCalendar.updateSize();
+        }
+      });
+    });
+  })();
+</script>
 <script src="{{ url_for('static', filename='js/block_grid.js') }}"></script>
 <script>
   initBlockGrid(document.getElementById("availability-grid"), {
@@ -137,64 +143,13 @@
     constraint: {{ trainer_blocks | tojson }},
     saveUrl: "{{ url_for('booking.save_recurring', token=member.booking_token) }}",
     csrfToken: document.querySelector('meta[name="csrf-token"]').getAttribute("content"),
-    saveLabel: {{ "이번 회차 제출하기" | tojson if upcoming_round else "저장" | tojson }},
+    saveLabel: {{ "제출하기" | tojson if upcoming_round else "저장" | tojson }},
     reloadOnSave: {{ "true" if upcoming_round else "false" }},
+    danger: {{ "true" if upcoming_round else "false" }},
+    messageField: document.getElementById("plan-message"),
     startHour: {{ schedule_start_hour }},
     endHour: {{ schedule_end_hour }},
   });
-</script>
-<script>
-  (function () {
-    const section = document.getElementById("confirmed-events-section");
-    const list = document.getElementById("confirmed-events-list");
-    const token = "{{ member.booking_token }}";
-
-    function renderEvents(events) {
-      if (!events.length) {
-        section.classList.add("hidden");
-        list.innerHTML = "";
-        return;
-      }
-      section.classList.remove("hidden");
-      list.innerHTML = events
-        .map(function (e) {
-          const loc = e.location_name ? ` @ ${e.location_name}` : "";
-          const action = e.change_pending
-            ? `<span class="pending">수정 요청 대기중</span>
-               <button type="button" class="copy-link-btn cancel-change-request-btn" data-request-id="${e.change_request_id}">요청 취소</button>`
-            : `<button type="button" class="copy-link-btn change-request-btn"
-                 data-event-id="${e.id}" data-date="${e.date}" data-start="${e.start_time}" data-end="${e.end_time}">수정 요청</button>`;
-          return `<li><span>${e.date} ${e.start_time}~${e.end_time}${loc}</span>${action}</li>`;
-        })
-        .join("");
-    }
-
-    function refreshConfirmedEvents() {
-      fetch(`/book/${token}/confirmed`)
-        .then((res) => res.json())
-        .then(renderEvents);
-    }
-    window.refreshConfirmedEvents = refreshConfirmedEvents;
-
-    setInterval(refreshConfirmedEvents, 20000);
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible") refreshConfirmedEvents();
-    });
-
-    list.addEventListener("click", function (e) {
-      const btn = e.target.closest(".change-request-btn");
-      if (btn && window.startChangeMode) window.startChangeMode(btn);
-      const cancelBtn = e.target.closest(".cancel-change-request-btn");
-      if (cancelBtn) {
-        if (!confirm("이 변경 요청을 취소할까요?")) return;
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
-        fetch(`/book/${token}/events/${cancelBtn.dataset.requestId}/change-request/cancel`, {
-          method: "POST",
-          headers: { "X-CSRFToken": csrfToken },
-        }).then(() => refreshConfirmedEvents());
-      }
-    });
-  })();
 </script>
 <script>
   document.addEventListener("click", function (e) {
