@@ -122,6 +122,12 @@ body {
     align-items: center;
   }
   .sidebar-links { flex-direction: row; flex-wrap: wrap; }
+
+  .calendar-layout { flex-direction: column; }
+  #unassigned-panel { width: 100%; position: static; }
+  #calendar { overflow-x: auto; }
+  .date-range-nav { flex-wrap: wrap; }
+  .member-table { display: block; overflow-x: auto; white-space: nowrap; }
 }
 
 h1 {

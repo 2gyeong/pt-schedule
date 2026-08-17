@@ -142,6 +142,7 @@ document.addEventListener("DOMContentLoaded", function () {
       banner.className = "inline-banner hidden";
     }, 4000);
   }
+  window.showBanner = showBanner;
 
   const holidaysEl = document.getElementById("kr-holidays");
   const KR_HOLIDAYS = holidaysEl ? JSON.parse(holidaysEl.textContent) : {};

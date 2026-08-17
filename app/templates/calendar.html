@@ -31,7 +31,7 @@
     {% endfor %}
     <span class="legend-item"><span class="dot dot-pending"></span>승인 대기 (빗금)</span>
     <span class="legend-item"><span class="dot" style="border:2px dashed var(--text-muted); background:transparent;"></span>상담 (점선 테두리)</span>
-    <span class="legend-item"><span class="dot" style="background:#a9d9be"></span>선택한 회원의 가능 시간</span>
+    <span class="legend-item"><span class="dot" style="background:#f0cf5a"></span>회원 가능 시간</span>
   </div>
   <button type="button" id="new-event-btn">+ 새 일정 등록</button>
 </div>
@@ -141,4 +141,18 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
+{% with generate_messages = get_flashed_messages(category_filter=["generate"]) %}
+{% if generate_messages %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (window.showBanner) {
+      window.showBanner(
+        "{{ 'error' if '부족' in generate_messages[0] else 'success' }}",
+        {{ generate_messages[0] | tojson }}
+      );
+    }
+  });
+</script>
+{% endif %}
+{% endwith %}
 {% endblock %}

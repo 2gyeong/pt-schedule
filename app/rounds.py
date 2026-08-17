@@ -230,7 +230,7 @@ def member_valid_slots(round_id, member_id):
                 "start": f"{d.isoformat()}T{s.strftime('%H:%M:%S')}",
                 "end": f"{d.isoformat()}T{e.strftime('%H:%M:%S')}",
                 "display": "background",
-                "color": "#a9d9be",
+                "color": "#f0cf5a",
             }
             for d, s, e in slots
         ]
@@ -359,11 +359,11 @@ def generate(round_id):
 
     assigned, unassigned = generate_schedule(round_obj)
     if unassigned:
-        flash(f"{len(assigned)}건 배정 완료. 아래 회원은 부족해요.")
+        flash(f"{len(assigned)}건 배정 완료. 아래 회원은 부족해요.", "generate")
         for m, missing, reason in unassigned:
             flash(f"· {m.name} — {missing}회 부족 ({reason})")
     else:
-        flash(f"{len(assigned)}건 전체 배정 완료.")
+        flash(f"{len(assigned)}건 전체 배정 완료.", "generate")
     return redirect(url_for("rounds.round_detail", round_id=round_id))
 
 

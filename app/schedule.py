@@ -258,7 +258,7 @@ def member_available(member_id):
                 "start": f"{d.isoformat()}T{s.isoformat()}",
                 "end": f"{d.isoformat()}T{e.isoformat()}",
                 "display": "background",
-                "color": "#a9d9be",
+                "color": "#f0cf5a",
             }
             for d, s, e in blocks
         ]
