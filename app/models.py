@@ -200,6 +200,7 @@ class Announcement(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     trainer_id = db.Column(db.Integer, db.ForeignKey("trainer.id"), nullable=False)
+    round_id = db.Column(db.Integer, db.ForeignKey("scheduling_round.id"), nullable=True)  # 회차 시작 알림이면 그 회차
     content = db.Column(db.Text, nullable=False)
     is_published = db.Column(db.Boolean, nullable=False, default=True)  # 미게시로 내려두면 회원에게 안 보임
     publish_at = db.Column(db.DateTime, nullable=True)  # 설정하면 이 시각 전까지는 회원에게 안 보임 (예약 게시)

@@ -92,8 +92,12 @@ def create_round():
             session_minutes=int(session_minutes) if session_minutes else 50,
         )
         db.session.add(round_obj)
+        db.session.flush()
         # 새 회차를 시작하면 회원들이 계획하기 탭에서 바로 알아챌 수 있게 공지사항으로 알린다.
-        db.session.add(Announcement(trainer_id=trainer.id, content="다음 예약 계획을 제출해주세요."))
+        # 이 회차가 삭제되거나 확정되면(delete_round/approve) 같이 지운다.
+        db.session.add(
+            Announcement(trainer_id=trainer.id, round_id=round_obj.id, content="다음 예약 계획을 제출해주세요.")
+        )
         db.session.commit()
     if _is_ajax():
         return jsonify({"ok": True, "html": _rounds_panel_html(trainer)})
@@ -376,6 +380,7 @@ def delete_round(round_id):
     trainer = current_trainer()
     round_obj = SchedulingRound.query.filter_by(id=round_id, trainer_id=trainer.id).first_or_404()
     ScheduleEvent.query.filter_by(round_id=round_id, status="요청").delete()
+    Announcement.query.filter_by(round_id=round_id).delete()
     db.session.delete(round_obj)
     db.session.commit()
     if _is_ajax():
@@ -394,6 +399,7 @@ def approve(round_id):
         event.status = "확정"
         event.member.remaining_sessions -= 1
     round_obj.status = "확정"
+    Announcement.query.filter_by(round_id=round_id).delete()
     db.session.commit()
     flash(f"{len(events)}건이 확정되었습니다.")
     return redirect(url_for("schedule.calendar_view"))
