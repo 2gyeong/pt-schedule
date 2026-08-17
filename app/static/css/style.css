@@ -594,7 +594,9 @@ th.fc-holiday .fc-daynum { display: block; }
 
 .fc-event.ev-pending {
   border-style: dashed !important;
-  opacity: 0.5;
+  border-color: var(--danger) !important;
+  border-width: 2px !important;
+  opacity: 0.7;
 }
 
 .fc-event.ev-dimmed {
