@@ -21,8 +21,12 @@
 {% if round.status != "확정" %}
 <form method="post" action="{{ url_for('rounds.update_dates', round_id=round.id) }}" class="member-form" id="dates-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>시작일 <input type="date" name="start_date" id="dates-start" value="{{ round.start_date.isoformat() }}" required></label>
-  <label>종료일 <input type="date" name="end_date" id="dates-end" value="{{ round.end_date.isoformat() }}" required></label>
+  <div class="date-range-nav">
+    <button type="button" id="dates-prev-week" class="copy-link-btn" title="한 주 전으로">◀</button>
+    <label>시작일 <input type="date" name="start_date" id="dates-start" value="{{ round.start_date.isoformat() }}" required></label>
+    <label>종료일 <input type="date" name="end_date" id="dates-end" value="{{ round.end_date.isoformat() }}" required></label>
+    <button type="button" id="dates-next-week" class="copy-link-btn" title="한 주 뒤로">▶</button>
+  </div>
   <button type="submit">기간 수정</button>
 </form>
 {% endif %}
@@ -117,6 +121,24 @@
       e.preventDefault();
       alert("종료일이 시작일보다 빠를 수 없어요.");
     }
+  });
+
+  function shiftIsoDate(iso, days) {
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function shiftRoundWeek(days) {
+    dStart.value = shiftIsoDate(dStart.value, days);
+    dEnd.value = shiftIsoDate(dEnd.value, days);
+    if (datesForm.requestSubmit) datesForm.requestSubmit();
+    else datesForm.submit();
+  }
+  document.getElementById("dates-prev-week").addEventListener("click", function () {
+    shiftRoundWeek(-7);
+  });
+  document.getElementById("dates-next-week").addEventListener("click", function () {
+    shiftRoundWeek(7);
   });
 
   function renderSubmitCell(memberId, submitted) {

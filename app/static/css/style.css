@@ -295,6 +295,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+.date-range-nav {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.date-range-nav button {
+  padding: 9px 12px;
+}
 .inline-check {
   display: flex;
   align-items: center;
