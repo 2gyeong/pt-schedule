@@ -311,6 +311,7 @@ document.addEventListener("DOMContentLoaded", function () {
     initialView: "timeGridWeek",
     initialDate: roundStartDate || undefined,
     locale: "ko",
+    hiddenDays: [0],
     headerToolbar: {
       left: "prev,next today",
       center: "title",

@@ -106,6 +106,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "timeGridWeek",
     locale: "ko",
+    hiddenDays: [0],
     headerToolbar: {
       left: "prev,next today",
       center: "title",

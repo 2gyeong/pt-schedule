@@ -137,6 +137,7 @@
   const trainerCalendar = new FullCalendar.Calendar(document.getElementById("trainer-calendar"), {
     initialView: "timeGridWeek",
     locale: "ko",
+    hiddenDays: [0],
     initialDate: "{{ initial_date.isoformat() }}",
     headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek" },
     slotMinTime: "{{ "%02d" % current_trainer().schedule_start_hour }}:00:00",
