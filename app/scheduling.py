@@ -45,6 +45,8 @@ def _intersect(start_a, end_a, start_b, end_b):
 
 DEFAULT_TRAVEL_MIN = 30  # 지점 간 실제 이동 시간을 아직 입력하지 않았을 때 쓰는 보수적인 기본값
 MAX_GAP_MIN = 60  # 같은 날 세션 사이에 이 시간(분)보다 더 비지 않게 한다 (공강처럼 빈 시간 방지)
+MAX_MOVES_PER_DAY = 2  # 하루에 지점을 옮기는 횟수 상한. 같은 지점을 다시 가는 것도 허용하되 횟수는 제한한다.
+REVISIT_PENALTY_MIN = 45  # 같은 지점을 다시 방문하게 되는 배치는, 가능하면 피하도록 주는 비용(분 단위)
 
 
 def load_travel_overrides(trainer_id):
@@ -67,22 +69,27 @@ def _travel_minutes(loc_a, loc_b, overrides=None) -> int:
     return DEFAULT_TRAVEL_MIN
 
 
-def _location_pattern_ok(day_entries, cursor, slot_end, location) -> bool:
-    """하루에 방문하는 지점은 최대 2곳까지만 허용하고, 한 번 떠난 지점으로
-    그날 다시 돌아가지 않게 한다 (이동을 최소화하기 위한 제약)."""
-    if location is None:
-        return True
+def _compressed_location_sequence(day_entries, cursor, slot_end, location):
+    """그날 지점 방문 순서를, 연달아 같은 지점이면 하나로 뭉쳐서 반환한다.
+    예: [A, A, B, A] -> [A, B, A]. 결과 리스트의 길이-1이 그날 이동 횟수다."""
     combined = sorted(day_entries + [(cursor, slot_end, location)], key=lambda e: e[0])
     sequence = []
     for _, _, loc in combined:
         loc_id = loc.id if loc is not None else None
         if not sequence or sequence[-1] != loc_id:
             sequence.append(loc_id)
-    if len(set(sequence)) > 2:
-        return False
-    if len(sequence) != len(set(sequence)):
-        return False
-    return True
+    return sequence
+
+
+def _location_pattern_ok(day_entries, cursor, slot_end, location) -> bool:
+    """하루 이동 횟수(지점을 바꾸는 횟수)가 MAX_MOVES_PER_DAY를 넘지 않게 한다. 같은 지점을
+    다시 방문하는 것 자체는 막지 않는다 (회원마다 주 2회씩 최대한 배정하려면 필요할 수 있음) -
+    다만 굳이 재방문이 필요 없으면 피하도록 _insertion_cost에서 별도로 비용을 매긴다."""
+    if location is None:
+        return True
+    sequence = _compressed_location_sequence(day_entries, cursor, slot_end, location)
+    moves = len(sequence) - 1
+    return moves <= MAX_MOVES_PER_DAY
 
 
 def _gap_ok(day_entries, cursor, slot_end) -> bool:
@@ -151,6 +158,10 @@ def _insertion_cost(day_entries, start_dt, end_dt, location, preferred_start_loc
         cost -= _travel_minutes(before[2], after[2], overrides)
     if before is None and after is None and preferred_start_location is not None:
         cost += _travel_minutes(preferred_start_location, location, overrides)
+    if location is not None:
+        sequence = _compressed_location_sequence(day_entries, start_dt, end_dt, location)
+        if sequence.count(location.id) > 1:
+            cost += REVISIT_PENALTY_MIN
     return cost
 
 
