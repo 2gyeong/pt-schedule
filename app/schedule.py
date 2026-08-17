@@ -164,15 +164,24 @@ def create_event():
         return jsonify({"error": "종료 시간이 시작 시간보다 늦어야 해요."}), 400
 
     location = Location.query.filter_by(id=location_id, trainer_id=trainer.id).first() if location_id else None
-    if slot_conflicts(trainer.id, event_date, start_time, end_time, location):
-        return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
     if event_type == "PT" and _member_double_booked(member.id, event_date):
         return jsonify({"error": "이 회원은 이미 이 날짜에 다른 PT 예약이 있어요."}), 400
 
+    # 선생님은 마스터 권한으로 다른 예약과 겹치거나(지점 간 이동 시간 부족 포함) 회원이
+    # 설정한 시간이 아니어도 등록할 수 있지만(미배정 드래그든 수동 등록이든 상관없이),
+    # 먼저 그렇다는 걸 알려주고 확인을 받는다. 상담은 이 마스터 권한 대상이 아니라 그대로 막는다.
+    confirmed = bool(data.get("confirmed_outside_availability"))
+    if slot_conflicts(trainer.id, event_date, start_time, end_time, location):
+        if event_type != "PT":
+            return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
+        if not confirmed:
+            return jsonify({
+                "needs_confirmation": True,
+                "message": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요. 그래도 등록하시겠습니까?",
+            })
+
     round_id = data.get("round_id") if event_type == "PT" else None
-    # 선생님은 마스터 권한으로 회원이 설정한 시간이 아니어도 등록할 수 있지만(미배정 드래그든
-    # 수동 등록이든 상관없이), 먼저 그렇다는 걸 알려주고 확인을 받는다.
-    if event_type == "PT" and not data.get("confirmed_outside_availability"):
+    if event_type == "PT" and not confirmed:
         if not _within_member_availability(member, event_date, start_time, end_time):
             return jsonify({
                 "needs_confirmation": True,
@@ -216,8 +225,6 @@ def update_event(event_id):
     new_location = (
         Location.query.filter_by(id=new_location_id, trainer_id=trainer.id).first() if new_location_id else None
     )
-    if slot_conflicts(trainer.id, new_date, new_start, new_end, new_location, exclude_event_id=event.id):
-        return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
     if (
         event.event_type == "PT"
         and new_date != event.date
@@ -225,10 +232,20 @@ def update_event(event_id):
     ):
         return jsonify({"error": "이 회원은 이미 이 날짜에 다른 PT 예약이 있어요."}), 400
 
+    confirmed = bool(data.get("confirmed_outside_availability"))
+    if slot_conflicts(trainer.id, new_date, new_start, new_end, new_location, exclude_event_id=event.id):
+        if event.event_type != "PT":
+            return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
+        if not confirmed:
+            return jsonify({
+                "needs_confirmation": True,
+                "message": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요. 그래도 변경하시겠습니까?",
+            })
+
     if (
         event.event_type == "PT"
         and data.get("check_availability")
-        and not data.get("confirmed_outside_availability")
+        and not confirmed
         and event.member
         and not _within_member_availability(event.member, new_date, new_start, new_end)
     ):
