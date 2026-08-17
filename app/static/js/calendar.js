@@ -21,11 +21,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const startField = document.getElementById("event-start");
   const endField = document.getElementById("event-end");
   const statusField = document.getElementById("event-status");
-  const statusFieldWrap = document.getElementById("event-status-field");
   const memoField = document.getElementById("event-memo");
   const deleteBtn = document.getElementById("delete-btn");
   const cancelBtn = document.getElementById("cancel-btn");
   const cancelBtn2 = document.getElementById("cancel-btn-2");
+  const modalCloseX = document.getElementById("modal-close-x");
   const normalActions = document.getElementById("normal-actions");
   const requestActions = document.getElementById("request-actions");
   const approveBtn = document.getElementById("approve-btn");
@@ -41,6 +41,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   cancelBtn.addEventListener("click", closeModal);
   cancelBtn2.addEventListener("click", closeModal);
+  modalCloseX.addEventListener("click", closeModal);
 
   function addMinutes(timeStr, minutes) {
     const [h, m] = timeStr.split(":").map(Number);
@@ -79,6 +80,47 @@ document.addEventListener("DOMContentLoaded", function () {
     toggleMemberFields();
   });
 
+  // 일정 수정 중일 때는 지점을 고르는 순간 바로 반영한다 (저장 버튼까지 안 눌러도 됨).
+  // 새 일정 등록 중일 때는 아직 저장할 이벤트가 없으니 그냥 값만 기억해둔다.
+  locationField.addEventListener("change", function () {
+    const id = idField.value;
+    if (!id) return;
+    const newLocationId = locationField.value || null;
+
+    function submitLocation(confirmed) {
+      fetch(`/api/events/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify({
+          location_id: newLocationId,
+          check_availability: true,
+          confirmed_outside_availability: confirmed,
+        }),
+      })
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (data.needs_confirmation) {
+            if (confirm(data.message)) {
+              submitLocation(true);
+              return;
+            }
+            locationField.value = editOriginalLocationId || "";
+            showBanner("error", data.message);
+            return;
+          }
+          if (!ok) {
+            locationField.value = editOriginalLocationId || "";
+            showBanner("error", data.error || "지점을 변경하지 못했어요.");
+            return;
+          }
+          editOriginalLocationId = newLocationId || "";
+          calendar.refetchEvents();
+          showBanner("success", "지점이 변경되었습니다.");
+        });
+    }
+    submitLocation(false);
+  });
+
   const cubeContainer = document.getElementById("event-time-cubes");
   for (let h = scheduleStartHour; h < scheduleEndHour; h++) {
     const time = String(h).padStart(2, "0") + ":00";
@@ -101,6 +143,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function openCreateModal(dateStr, startTime) {
     modalTitle.textContent = "일정 등록";
     editOriginalDateTime = null;
+    editOriginalLocationId = null;
     idField.value = "";
     typeField.value = "PT";
     prospectNameField.value = "";
@@ -111,7 +154,6 @@ document.addEventListener("DOMContentLoaded", function () {
     statusField.value = "확정";
     normalActions.classList.remove("hidden");
     requestActions.classList.add("hidden");
-    statusFieldWrap.classList.remove("hidden");
     deleteBtn.classList.add("hidden");
     openModal();
   }
@@ -122,6 +164,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   let selectedMemberId = "";
   let editOriginalDateTime = null;
+  let editOriginalLocationId = null;
   const AVAILABILITY_SOURCE_ID = "member-availability";
   const DRAG_AVAILABILITY_SOURCE_ID = "drag-availability";
 
@@ -509,6 +552,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       toggleMemberFields();
       locationField.value = event.extendedProps.location_id || "";
+      editOriginalLocationId = event.extendedProps.location_id || "";
       dateField.value = event.startStr.slice(0, 10);
       startField.value = event.startStr.slice(11, 16);
       endField.value = addMinutes(startField.value, durationForType());
@@ -523,12 +567,10 @@ document.addEventListener("DOMContentLoaded", function () {
         modalTitle.textContent = "예약 요청 확인";
         normalActions.classList.add("hidden");
         requestActions.classList.remove("hidden");
-        statusFieldWrap.classList.add("hidden");
       } else {
         modalTitle.textContent = "일정 수정";
         normalActions.classList.remove("hidden");
         requestActions.classList.add("hidden");
-        statusFieldWrap.classList.remove("hidden");
         deleteBtn.classList.remove("hidden");
       }
       openModal();
@@ -730,7 +772,7 @@ document.addEventListener("DOMContentLoaded", function () {
     newRoundForm.addEventListener("submit", function (e) {
       e.preventDefault();
       if (nrEnd.value < nrStart.value) {
-        alert("종료일이 시작일보다 빠를 수 없어요.");
+        showBanner("error", "종료일이 시작일보다 빠를 수 없어요.");
         return;
       }
       fetch(newRoundForm.action, {
@@ -743,7 +785,7 @@ document.addEventListener("DOMContentLoaded", function () {
           if (data.ok) {
             window.location.reload();
           } else {
-            alert(data.message || "회차를 시작하지 못했어요.");
+            showBanner("error", data.message || "회차를 시작하지 못했어요.");
           }
         });
     });

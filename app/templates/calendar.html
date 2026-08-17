@@ -59,7 +59,10 @@
 
 <div id="event-modal" class="modal hidden">
   <div class="modal-box">
-    <h2 id="modal-title">일정 등록</h2>
+    <div class="modal-header-row">
+      <h2 id="modal-title">일정 등록</h2>
+      <button type="button" id="modal-close-x" class="modal-close-x" aria-label="닫기">&times;</button>
+    </div>
     <form id="event-form">
       <input type="hidden" id="event-id">
       <label>종류
@@ -91,13 +94,7 @@
       <div class="time-cubes" id="event-time-cubes"></div>
       <label>시작 시간 (세부 조정) <input type="time" id="event-start" required></label>
       <input type="hidden" id="event-end">
-      <label id="event-status-field">상태
-        <select id="event-status">
-          <option value="확정">확정</option>
-          <option value="완료">완료</option>
-          <option value="취소">취소</option>
-        </select>
-      </label>
+      <input type="hidden" id="event-status" value="확정">
       <label>메모 <input type="text" id="event-memo"></label>
       <div class="modal-actions" id="normal-actions">
         <button type="submit">저장</button>

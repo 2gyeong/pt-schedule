@@ -34,12 +34,22 @@
 <div class="panel-section-head">
   <h2>회원별 횟수</h2>
   {% if round.status != "확정" %}
-  <button type="button" id="mark-all-submitted-btn" class="copy-link-btn">전체 일괄 승인</button>
+  <div class="panel-actions">
+    <button type="button" id="mark-all-submitted-btn" class="copy-link-btn">전체 일괄 승인</button>
+    <button type="submit" form="generate-form" class="calc-btn">계산하기</button>
+    {% if round.status == "계산됨" %}
+    <form method="post" action="{{ url_for('rounds.approve', round_id=round.id) }}" class="inline-form"
+          onsubmit="return confirm('제안된 스케줄을 모두 확정할까요? 확정 시 회원별 잔여 횟수가 차감됩니다.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">회차 승인</button>
+    </form>
+    {% endif %}
+  </div>
   {% endif %}
 </div>
 <p class="hint">제출완료된 회원만 계산돼요. 못 받았으면 "선생님 승인"으로 대신 처리하세요.</p>
 
-<form method="post" action="{{ url_for('rounds.generate', round_id=round.id) }}">
+<form method="post" action="{{ url_for('rounds.generate', round_id=round.id) }}" id="generate-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <table class="member-table">
     <thead>
@@ -75,9 +85,6 @@
       {% endfor %}
     </tbody>
   </table>
-  <div class="modal-actions">
-    <button type="submit">스케줄 생성</button>
-  </div>
 </form>
 
 <div id="reassign-flash">
@@ -95,16 +102,6 @@
 <div id="events-section">
   {% include "_round_events_table.html" %}
 </div>
-
-{% if round.status == "계산됨" %}
-<div class="round-approve-row">
-  <form method="post" action="{{ url_for('rounds.approve', round_id=round.id) }}"
-        onsubmit="return confirm('제안된 스케줄을 모두 확정할까요? 확정 시 회원별 잔여 횟수가 차감됩니다.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit">회차 승인</button>
-  </form>
-</div>
-{% endif %}
 
 {% if round.status != "확정" %}
 <script>

@@ -99,6 +99,7 @@ def create_round():
             Announcement(trainer_id=trainer.id, round_id=round_obj.id, content="다음 예약 계획을 제출해주세요.")
         )
         db.session.commit()
+        flash("새 회차를 시작했어요. 회원들에게 공지로 알렸어요.", "generate")
     if _is_ajax():
         return jsonify({"ok": True, "html": _rounds_panel_html(trainer)})
     return redirect(url_for("rounds.list_rounds"))
@@ -173,6 +174,7 @@ def unassigned_members_for_round(round_obj):
         missing = q.count - assigned_counts.get(q.member_id, 0)
         if missing > 0:
             result.append({"member_id": q.member_id, "name": q.member.name, "missing": missing})
+    result.sort(key=lambda r: r["missing"], reverse=True)
     return result
 
 
@@ -367,8 +369,6 @@ def generate(round_id):
     assigned, unassigned = generate_schedule(round_obj)
     if unassigned:
         flash(f"{len(assigned)}건 배정 완료. 아래 회원은 부족해요.", "generate")
-        for m, missing, reason in unassigned:
-            flash(f"· {m.name} — {missing}회 부족 ({reason})")
     else:
         flash(f"{len(assigned)}건 전체 배정 완료.", "generate")
     return redirect(url_for("rounds.round_detail", round_id=round_id))

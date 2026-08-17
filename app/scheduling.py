@@ -44,6 +44,7 @@ def _intersect(start_a, end_a, start_b, end_b):
 
 
 DEFAULT_TRAVEL_MIN = 30  # 지점 간 실제 이동 시간을 아직 입력하지 않았을 때 쓰는 보수적인 기본값
+SAME_LOCATION_BREAK_MIN = 10  # 같은 지점에서 연달아 수업할 때 세션 사이에 두는 최소 쉬는 시간(분)
 MAX_GAP_MIN = 60  # 같은 날 세션 사이에 이 시간(분)보다 더 비지 않게 한다 (공강처럼 빈 시간 방지)
 MAX_MOVES_PER_DAY = 2  # 하루에 지점을 옮기는 횟수 상한. 같은 지점을 다시 가는 것도 허용하되 횟수는 제한한다.
 REVISIT_PENALTY_MIN = 45  # 같은 지점을 다시 방문하게 되는 배치는, 가능하면 피하도록 주는 비용(분 단위)
@@ -67,6 +68,16 @@ def _travel_minutes(loc_a, loc_b, overrides=None) -> int:
         if key in overrides:
             return overrides[key]
     return DEFAULT_TRAVEL_MIN
+
+
+def _min_buffer_minutes(loc_a, loc_b, overrides=None) -> int:
+    """세션 사이에 반드시 있어야 하는 최소 간격(분). 같은 지점이면 쉬는 시간(고정값),
+    다른 지점이면 이동 시간을 그대로 쓴다 (이동 시간 외에 별도로 쉬는 시간을 더하지 않음)."""
+    if loc_a is None or loc_b is None:
+        return 0
+    if loc_a.id == loc_b.id:
+        return SAME_LOCATION_BREAK_MIN
+    return _travel_minutes(loc_a, loc_b, overrides)
 
 
 def _compressed_location_sequence(day_entries, cursor, slot_end, location):
@@ -112,13 +123,13 @@ def _gap_ok(day_entries, cursor, slot_end) -> bool:
 
 
 def _has_conflict(day_entries, cursor, slot_end, location, overrides=None) -> bool:
-    """시간이 겹치거나, 지점이 달라 이동시간이 부족하거나, 하루 이동 패턴이
-    비효율적이거나(지점 3곳 이상 또는 이미 떠난 지점 재방문), 세션 사이가 너무
-    비면(공강) 충돌로 본다."""
+    """시간이 겹치거나, 세션 사이 간격이 부족하거나(같은 지점이면 쉬는 시간, 다른 지점이면
+    이동 시간), 하루 이동 패턴이 비효율적이거나(지점을 너무 여러 번 옮기는 경우), 세션
+    사이가 너무 비면(공강) 충돌로 본다."""
     for entry_start, entry_end, entry_loc in day_entries:
         if _overlaps(cursor, slot_end, entry_start, entry_end):
             return True
-        buffer_min = _travel_minutes(entry_loc, location, overrides)
+        buffer_min = _min_buffer_minutes(entry_loc, location, overrides)
         if buffer_min <= 0:
             continue
         buffer = timedelta(minutes=buffer_min)

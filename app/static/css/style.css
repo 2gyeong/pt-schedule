@@ -218,6 +218,15 @@ h2 {
   margin-top: 28px;
 }
 .panel-section-head h2 { margin: 0; }
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel-actions .inline-form { display: contents; }
+.calc-btn { background: var(--warning); }
+.calc-btn:hover { background: #c99a4e; }
 
 .flash {
   list-style: none;
@@ -484,6 +493,31 @@ th.fc-holiday .fc-daynum { display: block; }
 .modal-actions.hidden { display: none; }
 
 #event-modal .modal-box { width: 360px; }
+
+.modal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.modal-header-row h2 { margin: 0; }
+.modal-close-x {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close-x:hover { background: var(--surface-alt); color: var(--text); }
 
 .time-cubes {
   display: grid;
