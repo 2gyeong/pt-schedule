@@ -14,13 +14,38 @@ schedule_bp = Blueprint("schedule", __name__)
 
 
 def _within_member_availability(member, event_date, start_time, end_time) -> bool:
-    """회원이 스스로 등록해둔 고정 가능 시간 안에 이 슬롯이 완전히 들어가는지."""
+    """회원이 스스로 등록해둔 고정 가능 시간 안에 이 슬롯이 완전히 들어가는지.
+    가능 시간은 1시간 단위 블록으로 저장되므로, 연달아 붙어 있는 블록들은 이어붙여서
+    확인해야 한다 (예: 12~13시, 13~14시가 모두 선택돼 있으면 12:40~13:30도 가능한 시간)."""
     weekday = event_date.weekday()
-    blocks = RecurringAvailability.query.filter_by(member_id=member.id, weekday=weekday).all()
+    blocks = sorted(
+        RecurringAvailability.query.filter_by(member_id=member.id, weekday=weekday).all(),
+        key=lambda b: b.start_time,
+    )
+    covered_until = start_time
     for b in blocks:
-        if b.start_time <= start_time and end_time <= b.end_time:
+        if b.start_time > covered_until:
+            break
+        if b.end_time > covered_until:
+            covered_until = b.end_time
+        if covered_until >= end_time:
             return True
     return False
+
+
+def _member_double_booked(member_id, event_date, exclude_event_id=None) -> bool:
+    """이 회원이 같은 날짜에 이미 다른 PT 예약(요청/확정)이 있는지. 미배정 드래그나 수동 등록
+    같은 트레이너 직접 조작 경로는 slot_conflicts()만으로는 걸러지지 않으므로(트레이너 전체
+    일정의 시간 겹침만 확인하고 "같은 회원 하루 1회" 규칙은 보지 않음) 별도로 확인해야 한다."""
+    query = ScheduleEvent.query.filter(
+        ScheduleEvent.member_id == member_id,
+        ScheduleEvent.date == event_date,
+        ScheduleEvent.event_type == "PT",
+        ScheduleEvent.status.in_(["요청", "확정"]),
+    )
+    if exclude_event_id:
+        query = query.filter(ScheduleEvent.id != exclude_event_id)
+    return query.first() is not None
 
 
 def _apply_status(event: ScheduleEvent, new_status: str):
@@ -141,6 +166,8 @@ def create_event():
     location = Location.query.filter_by(id=location_id, trainer_id=trainer.id).first() if location_id else None
     if slot_conflicts(trainer.id, event_date, start_time, end_time, location):
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
+    if event_type == "PT" and _member_double_booked(member.id, event_date):
+        return jsonify({"error": "이 회원은 이미 이 날짜에 다른 PT 예약이 있어요."}), 400
 
     round_id = data.get("round_id") if event_type == "PT" else None
     # 선생님은 마스터 권한으로 회원이 설정한 시간이 아니어도 등록할 수 있지만(미배정 드래그든
@@ -191,6 +218,12 @@ def update_event(event_id):
     )
     if slot_conflicts(trainer.id, new_date, new_start, new_end, new_location, exclude_event_id=event.id):
         return jsonify({"error": "이 시간은 다른 예약과 겹치거나 이동 시간이 부족해요."}), 400
+    if (
+        event.event_type == "PT"
+        and new_date != event.date
+        and _member_double_booked(event.member_id, new_date, exclude_event_id=event.id)
+    ):
+        return jsonify({"error": "이 회원은 이미 이 날짜에 다른 PT 예약이 있어요."}), 400
 
     if (
         event.event_type == "PT"

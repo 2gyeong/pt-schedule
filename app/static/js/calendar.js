@@ -179,7 +179,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const memberId = el.dataset.memberId;
     const roundId = calendarEl.dataset.roundId;
     clearMemberAvailabilityHighlight();
-    if (!roundId) return;
+    if (!roundId || !info.date) return;
     const dateStr = toDateStr(info.date);
     const startStr = formatEventTime(info.date);
     const endStr = addMinutes(startStr, 50);
@@ -216,6 +216,9 @@ document.addEventListener("DOMContentLoaded", function () {
           calendar.refetchEvents();
           decrementUnassignedBlock(memberId);
           showBanner("success", "등록되었습니다.");
+        })
+        .catch(function () {
+          showBanner("error", "등록하지 못했어요. 다시 시도해주세요.");
         });
     }
     submit(false);
