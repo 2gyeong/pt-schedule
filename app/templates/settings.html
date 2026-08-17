@@ -10,4 +10,7 @@
 <h2 style="margin-top:32px;">지점 관리</h2>
 <p class="hint">PT 지점 등록·색상·지점 간 이동 시간 설정은 지점 관리 페이지에서 할 수 있어요.</p>
 <a href="{{ url_for('locations.list_locations') }}" class="copy-link-btn">지점 관리 열기</a>
+
+<h2 style="margin-top:32px;">로그아웃</h2>
+<a href="{{ url_for('auth.logout') }}" class="copy-link-btn danger-link">로그아웃</a>
 {% endblock %}

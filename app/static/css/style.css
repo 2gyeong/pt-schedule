@@ -632,6 +632,7 @@ th.fc-holiday .fc-daynum { display: block; }
 
 .copy-link-btn { background: var(--surface-alt); color: var(--text); }
 .copy-link-btn:hover { background: var(--border-soft); }
+.copy-link-btn.danger-link { color: var(--danger); }
 
 .announcement-edit-form {
   display: flex;
