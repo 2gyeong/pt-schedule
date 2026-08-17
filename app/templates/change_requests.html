@@ -6,6 +6,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.15/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.15/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/ko.global.min.js"></script>
 {% endblock %}
 {% block content %}
 <h1>예약 변경 요청</h1>
@@ -41,9 +42,26 @@
   <ul>
     <li>아래 달력에서 현재 예약 상황을 확인한 뒤, "수락"을 누르면 요청한 시간으로 옮겨져요.</li>
     <li>다른 예약과 겹치거나 이동 시간이 부족하면 자동으로 막히고 이유를 알려드려요.</li>
+    <li>테두리가 굵게 강조된 일정이 <strong>기존 예약</strong>, 노란 점선 블록이 <strong>요청한 새 시간</strong>이에요.</li>
   </ul>
 </div>
+<div class="legend" style="margin-bottom:12px;">
+  <span class="legend-item"><span class="dot" style="border:2px solid var(--accent); background:transparent;"></span>기존 예약</span>
+  <span class="legend-item"><span class="dot" style="background:#f0cf5a; border:1px dashed #8a6a37;"></span>요청한 새 시간</span>
+</div>
 <div id="trainer-calendar" style="margin-bottom:22px;"></div>
+<script id="pending-requests-data" type="application/json">
+[
+  {% for req in pending %}
+  {
+    "event_id": {{ req.event.id }},
+    "member_name": {{ req.member.name | tojson }},
+    "start": "{{ req.requested_date.isoformat() }}T{{ req.requested_start_time.strftime('%H:%M:%S') }}",
+    "end": "{{ req.requested_date.isoformat() }}T{{ req.requested_end_time.strftime('%H:%M:%S') }}"
+  }{{ "," if not loop.last }}
+  {% endfor %}
+]
+</script>
 
 <table class="member-table">
   <thead>
@@ -107,13 +125,29 @@
 {% block scripts %}
 {% if pending %}
 <script>
+  const pendingRequests = JSON.parse(document.getElementById("pending-requests-data").textContent);
+  const pendingEventIds = new Set(pendingRequests.map((r) => r.event_id));
+  const requestedSlotEvents = pendingRequests.map((r) => ({
+    title: `요청: ${r.member_name}`,
+    start: r.start,
+    end: r.end,
+    classNames: ["ev-change-request"],
+  }));
+
   const trainerCalendar = new FullCalendar.Calendar(document.getElementById("trainer-calendar"), {
     initialView: "timeGridWeek",
+    locale: "ko",
     initialDate: "{{ initial_date.isoformat() }}",
     headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek" },
     slotMinTime: "{{ "%02d" % current_trainer().schedule_start_hour }}:00:00",
     slotMaxTime: "{{ "%02d" % current_trainer().schedule_end_hour }}:00:00",
-    events: "/api/events",
+    eventSources: [
+      { url: "/api/events" },
+      { events: requestedSlotEvents },
+    ],
+    eventClassNames: function (arg) {
+      return pendingEventIds.has(Number(arg.event.id)) ? ["ev-change-request-current"] : [];
+    },
   });
   trainerCalendar.render();
 

@@ -613,6 +613,17 @@ th.fc-holiday .fc-daynum { display: block; }
   opacity: 0.25 !important;
 }
 
+.fc-event.ev-change-request {
+  background: #f0cf5a !important;
+  border: 2px dashed #8a6a37 !important;
+  color: #37352f !important;
+}
+
+.fc-event.ev-change-request-current {
+  border-width: 3px !important;
+  border-color: var(--accent) !important;
+}
+
 .fc-event.ev-consult {
   border-width: 2px !important;
   border-style: dashed !important;
