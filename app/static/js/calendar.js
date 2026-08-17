@@ -371,6 +371,11 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     },
     eventDragStart: function (info) {
+      // 어떤 상태의 일정을 드래그하든(확정/요청 상관없이) 그 회원의 가능 시간을 노란색으로 보여준다.
+      if (info.event.extendedProps.event_type === "PT" && info.event.extendedProps.member_id) {
+        showMemberAvailabilityHighlight(info.event.extendedProps.member_id);
+      }
+
       if (info.event.extendedProps.status !== "요청") return;
       const roundId = info.event.extendedProps.round_id;
       const memberId = info.event.extendedProps.member_id;
@@ -389,6 +394,7 @@ document.addEventListener("DOMContentLoaded", function () {
     eventDragStop: function (info) {
       const src = calendar.getEventSourceById(DRAG_AVAILABILITY_SOURCE_ID);
       if (src) src.remove();
+      clearMemberAvailabilityHighlight();
 
       // 배정된 일정을 달력 밖 "미배정" 패널 위에 놓으면 다시 미배정으로 되돌린다 (양방향 드래그).
       const panel = document.getElementById("unassigned-panel");
