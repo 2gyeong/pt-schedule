@@ -357,6 +357,7 @@ document.addEventListener("DOMContentLoaded", function () {
       return raw;
     },
     eventClassNames: function (arg) {
+      if (arg.event.display === "background") return [];
       const classes = arg.event.extendedProps.status === "요청" ? ["ev-pending"] : [];
       if (arg.event.extendedProps.event_type === "상담") classes.push("ev-consult");
       if (selectedMemberId && String(arg.event.extendedProps.member_id) !== selectedMemberId) {

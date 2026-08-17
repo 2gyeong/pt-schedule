@@ -598,6 +598,10 @@ th.fc-holiday .fc-daynum { display: block; }
   background: repeating-linear-gradient(45deg, #bbb, #bbb 2px, #ddd 2px, #ddd 4px);
 }
 
+.fc-bg-event {
+  opacity: 0.55 !important;
+}
+
 .fc-event.ev-pending {
   border-style: dashed !important;
   border-color: var(--danger) !important;
