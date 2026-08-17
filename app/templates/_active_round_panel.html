@@ -58,7 +58,7 @@
     <tbody>
       {% for member in members %}
       <tr>
-        <td>{{ member.name }}</td>
+        <td><a href="{{ url_for('booking.book_page', token=member.booking_token) }}" target="_blank" rel="noopener">{{ member.name }}</a></td>
         <td class="submit-status" data-member-id="{{ member.id }}">
           {% if member.id in submitted_member_ids %}
           <span class="ok">제출완료</span>
