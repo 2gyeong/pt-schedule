@@ -168,10 +168,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const AVAILABILITY_SOURCE_ID = "member-availability";
   const DRAG_AVAILABILITY_SOURCE_ID = "drag-availability";
 
-  function showCalendarFlash(message) {
-    const flash = document.getElementById("reassign-flash");
-    if (!flash) return;
-    flash.innerHTML = message ? `<ul class="flash"><li>${message}</li></ul>` : "";
+  function showCalendarFlash(message, type) {
+    if (!message) return;
+    showBanner(type || "error", message);
   }
 
   let bannerTimeout = null;
@@ -326,7 +325,7 @@ document.addEventListener("DOMContentLoaded", function () {
     return panel;
   }
 
-  function addToUnassignedPanel(memberId, memberName) {
+  function addToUnassignedPanel(memberId, memberName, locationName) {
     const panel = ensureUnassignedPanel();
     if (!panel) return;
     const list = document.getElementById("unassigned-list");
@@ -341,8 +340,9 @@ document.addEventListener("DOMContentLoaded", function () {
       block.dataset.memberId = memberId;
       block.dataset.name = memberName;
       block.dataset.missing = "1";
+      const locLabel = locationName ? ` <span class="unassigned-location">(${locationName})</span>` : "";
       block.innerHTML =
-        `<span class="unassigned-name">${memberName}</span><span class="unassigned-count">1회</span>`;
+        `<span class="unassigned-name">${memberName}${locLabel}</span><span class="unassigned-count">1회</span>`;
       list.appendChild(block);
     }
     refreshUnassignedEmptyHint();
@@ -429,7 +429,6 @@ document.addEventListener("DOMContentLoaded", function () {
       const roundId = info.event.extendedProps.round_id;
       const memberId = info.event.extendedProps.member_id;
       if (!roundId) return;
-      showCalendarFlash("");
       fetch(`/rounds/${roundId}/members/${memberId}/valid-slots?exclude_event_id=${info.event.id}`)
         .then((r) => r.json())
         .then((slots) => {
@@ -456,6 +455,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const memberId = info.event.extendedProps.member_id;
       const memberName = info.event.extendedProps.member_name;
+      const memberLocationName = info.event.extendedProps.location_name;
       if (!confirm(`${memberName}님을 다시 미배정으로 되돌릴까요?`)) return;
       fetch(`/api/events/${info.event.id}`, {
         method: "DELETE",
@@ -463,7 +463,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }).then((res) => {
         if (res.ok) {
           info.event.remove();
-          addToUnassignedPanel(memberId, memberName);
+          addToUnassignedPanel(memberId, memberName, memberLocationName);
           showBanner("success", "미배정으로 옮겼습니다.");
         } else {
           showBanner("error", "되돌리지 못했어요.");
@@ -535,7 +535,7 @@ document.addEventListener("DOMContentLoaded", function () {
       })
         .then((r) => r.json())
         .then((data) => {
-          showCalendarFlash(data.message);
+          showCalendarFlash(data.message, data.ok ? "success" : "error");
           const eventsSection = document.getElementById("events-section");
           if (data.table_html && eventsSection) eventsSection.innerHTML = data.table_html;
           if (!data.ok) info.revert();

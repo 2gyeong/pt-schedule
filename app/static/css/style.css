@@ -447,6 +447,11 @@ th.fc-holiday .fc-daynum { display: block; }
   font-weight: 600;
 }
 .unassigned-block:active { cursor: grabbing; }
+.unassigned-location {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #8a6a37;
+}
 .unassigned-count {
   font-size: 0.72rem;
   font-weight: 700;

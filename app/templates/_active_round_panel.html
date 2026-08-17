@@ -87,18 +87,6 @@
   </table>
 </form>
 
-<div id="reassign-flash">
-{% with messages = get_flashed_messages(category_filter=["message"]) %}
-  {% if messages %}
-    <ul class="flash">
-      {% for message in messages %}
-        <li>{{ message }}</li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-{% endwith %}
-</div>
-
 <div id="events-section">
   {% include "_round_events_table.html" %}
 </div>
@@ -116,7 +104,7 @@
   datesForm.addEventListener("submit", function (e) {
     if (dEnd.value < dStart.value) {
       e.preventDefault();
-      alert("종료일이 시작일보다 빠를 수 없어요.");
+      if (window.showBanner) window.showBanner("error", "종료일이 시작일보다 빠를 수 없어요.");
     }
   });
 
@@ -126,8 +114,11 @@
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
   function shiftRoundWeek(days) {
-    dStart.value = shiftIsoDate(dStart.value, days);
-    dEnd.value = shiftIsoDate(dEnd.value, days);
+    const newStart = shiftIsoDate(dStart.value, days);
+    const newEnd = shiftIsoDate(dEnd.value, days);
+    dStart.value = newStart;
+    dEnd.value = newEnd;
+    dEnd.min = newStart;
     if (datesForm.requestSubmit) datesForm.requestSubmit();
     else datesForm.submit();
   }
@@ -180,11 +171,10 @@
   }
 
   const eventsSection = document.getElementById("events-section");
-  const reassignFlash = document.getElementById("reassign-flash");
 
-  function showReassignFlash(message) {
-    if (!message) { reassignFlash.innerHTML = ""; return; }
-    reassignFlash.innerHTML = `<ul class="flash"><li>${message}</li></ul>`;
+  function showReassignFlash(message, ok) {
+    if (!message || !window.showBanner) return;
+    window.showBanner(ok ? "success" : "error", message);
   }
 
   function refreshMainCalendar() {
@@ -200,7 +190,7 @@
       .then((r) => r.json())
       .then((data) => {
         if (data.table_html) eventsSection.innerHTML = data.table_html;
-        showReassignFlash(data.message);
+        showReassignFlash(data.message, data.ok);
         if (data.ok) refreshMainCalendar();
         return data;
       });
@@ -226,9 +216,9 @@
     })
       .then((r) => r.json())
       .then((data) => {
-        if (!data.ok) { alert(data.message || "삭제하지 못했어요."); return; }
+        if (!data.ok) { showReassignFlash(data.message || "삭제하지 못했어요.", false); return; }
         if (data.table_html) eventsSection.innerHTML = data.table_html;
-        showReassignFlash(data.message);
+        showReassignFlash(data.message, true);
         refreshMainCalendar();
         if (data.member_id != null) updateQuotaInput(data.member_id, data.quota);
       });

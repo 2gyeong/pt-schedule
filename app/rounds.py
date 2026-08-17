@@ -99,7 +99,7 @@ def create_round():
             Announcement(trainer_id=trainer.id, round_id=round_obj.id, content="다음 예약 계획을 제출해주세요.")
         )
         db.session.commit()
-        flash("새 회차를 시작했어요. 회원들에게 공지로 알렸어요.", "generate")
+        flash("새 회차를 시작했어요. 회원들에게 공지로 알렸어요.", "banner-success")
     if _is_ajax():
         return jsonify({"ok": True, "html": _rounds_panel_html(trainer)})
     return redirect(url_for("rounds.list_rounds"))
@@ -173,7 +173,12 @@ def unassigned_members_for_round(round_obj):
             continue
         missing = q.count - assigned_counts.get(q.member_id, 0)
         if missing > 0:
-            result.append({"member_id": q.member_id, "name": q.member.name, "missing": missing})
+            result.append({
+                "member_id": q.member_id,
+                "name": q.member.name,
+                "missing": missing,
+                "location_name": q.member.location.name if q.member.location else "지점 미정",
+            })
     result.sort(key=lambda r: r["missing"], reverse=True)
     return result
 
@@ -343,12 +348,12 @@ def update_dates(round_id):
         start_date = datetime.fromisoformat(start_str).date()
         end_date = datetime.fromisoformat(end_str).date()
         if end_date < start_date:
-            flash("종료일이 시작일보다 빠를 수 없습니다.")
+            flash("종료일이 시작일보다 빠를 수 없습니다.", "banner-error")
             return redirect(url_for("rounds.round_detail", round_id=round_id))
         round_obj.start_date = start_date
         round_obj.end_date = end_date
         db.session.commit()
-        flash("기간을 수정했습니다. 다시 스케줄을 생성해주세요.")
+        flash("기간을 수정했습니다. 다시 스케줄을 생성해주세요.", "banner-success")
     return redirect(url_for("rounds.round_detail", round_id=round_id))
 
 
@@ -368,9 +373,9 @@ def generate(round_id):
 
     assigned, unassigned = generate_schedule(round_obj)
     if unassigned:
-        flash(f"{len(assigned)}건 배정 완료. 아래 회원은 부족해요.", "generate")
+        flash(f"{len(assigned)}건 배정 완료. 아래 회원은 부족해요.", "banner-error")
     else:
-        flash(f"{len(assigned)}건 전체 배정 완료.", "generate")
+        flash(f"{len(assigned)}건 전체 배정 완료.", "banner-success")
     return redirect(url_for("rounds.round_detail", round_id=round_id))
 
 
@@ -401,5 +406,5 @@ def approve(round_id):
     round_obj.status = "확정"
     Announcement.query.filter_by(round_id=round_id).delete()
     db.session.commit()
-    flash(f"{len(events)}건이 확정되었습니다.")
+    flash(f"{len(events)}건이 확정되었습니다.", "banner-success")
     return redirect(url_for("schedule.calendar_view"))

@@ -44,7 +44,7 @@
     <div id="unassigned-list">
       {% for m in unassigned_members %}
       <div class="unassigned-block" data-member-id="{{ m.member_id }}" data-name="{{ m.name }}" data-missing="{{ m.missing }}">
-        <span class="unassigned-name">{{ m.name }}</span>
+        <span class="unassigned-name">{{ m.name }} <span class="unassigned-location">({{ m.location_name }})</span></span>
         <span class="unassigned-count">{{ m.missing }}회</span>
       </div>
       {% endfor %}
@@ -138,14 +138,14 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
-{% with generate_messages = get_flashed_messages(category_filter=["generate"]) %}
-{% if generate_messages %}
+{% with banner_messages = get_flashed_messages(with_categories=True, category_filter=["banner-success", "banner-error"]) %}
+{% if banner_messages %}
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     if (window.showBanner) {
       window.showBanner(
-        "{{ 'error' if '부족' in generate_messages[0] else 'success' }}",
-        {{ generate_messages[0] | tojson }}
+        {{ ("success" if banner_messages[0][0] == "banner-success" else "error") | tojson }},
+        {{ banner_messages[0][1] | tojson }}
       );
     }
   });
